@@ -1,0 +1,117 @@
+{
+  "projectType": "saas",
+  "projectName": "GAM - Gestor Académico para Mobiliario",
+  "projectDescription": "A full-stack academic resource management system for UTL that handles classroom reservations, inventory, loans, and reporting through a web admin panel and a mobile app.",
+  "theme": "linden",
+  "primaryColor": "#1A5276",
+  "lightColor": "#D6EAF8",
+  "darkColor": "#1A3A5C",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Web Admin Panel",
+            "pages": [
+              "web/overview",
+              "web/login",
+              "web/dashboard",
+              "web/salones",
+              "web/inventario",
+              "web/reservaciones",
+              "web/prestamos",
+              "web/usuarios",
+              "web/reportes"
+            ]
+          },
+          {
+            "group": "Mobile App",
+            "pages": [
+              "mobile/overview",
+              "mobile/setup",
+              "mobile/features"
+            ]
+          },
+          {
+            "group": "Database",
+            "pages": [
+              "database/schema",
+              "database/stored-procedures"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/usuarios",
+              "api/salones",
+              "api/inventario",
+              "api/reservaciones",
+              "api/prestamos",
+              "api/reportes"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "User authentication with matricula and password",
+    "Classroom (salones) management with building assignments",
+    "Inventory tracking for furniture and equipment",
+    "Classroom reservation system",
+    "Equipment loan (prestamos) management",
+    "Admin dashboard with activity logs and statistics",
+    "Reporting module for operational insights",
+    "Cross-platform mobile app (iOS/Android) via Ionic/Capacitor",
+    "REST API backend built with Java EE (JAX-RS)"
+  ],
+  "publicApiSurface": [
+    "POST /usuario/login",
+    "GET /usuario/getAll",
+    "POST /usuario/insertar",
+    "POST /usuario/modificar",
+    "POST /usuario/eliminar",
+    "GET /salones/getAll",
+    "POST /salones/insertar",
+    "POST /salones/actualizar",
+    "POST /salones/eliminar",
+    "GET /salones/detalle/{id}",
+    "GET /inventario/getAll",
+    "GET /inventario/getByName",
+    "POST /inventario/save",
+    "POST /inventario/update",
+    "POST /inventario/delete",
+    "GET /inventario/getEdificios",
+    "GET /inventario/getSalones",
+    "GET /reservacion/getAll",
+    "POST /reservacion/insertar",
+    "POST /reservacion/actualizar",
+    "POST /reservacion/eliminar",
+    "GET /reservacion/getSalones",
+    "GET /prestamos/getAll",
+    "POST /prestamos/insert",
+    "POST /prestamos/update",
+    "POST /prestamos/delete",
+    "GET /reportes/*"
+  ]
+}
