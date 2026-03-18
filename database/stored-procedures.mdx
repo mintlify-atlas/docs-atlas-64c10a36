@@ -1,0 +1,999 @@
+---
+title: 'Stored Procedures'
+description: 'Reference for all stored procedures, triggers, and views in db_gam, organized by functional module.'
+keywords: ['stored procedures', 'triggers', 'MySQL', 'db_gam', 'login', 'inventario', 'reservaciones', 'prestamos', 'reportes', 'dashboard', 'bitácora']
+---
+
+## Overview
+
+All business logic that touches the database is encapsulated in stored procedures. The procedures are organized into seven functional modules, matching the SQL source files.
+
+<CardGroup cols={3}>
+  <Card title="Login" icon="lock">
+    Authentication with SHA-256 password comparison
+  </Card>
+  <Card title="Salones" icon="door-open">
+    CRUD for rooms with transactional validation
+  </Card>
+  <Card title="Inventario" icon="boxes-stacked">
+    Register, update, and soft-delete furniture items
+  </Card>
+  <Card title="Reservaciones" icon="calendar">
+    Insert, update, and soft-delete room reservations
+  </Card>
+  <Card title="Préstamos" icon="hand-holding">
+    Equipment loan check-out and return workflow
+  </Card>
+  <Card title="Reportes" icon="flag">
+    Create damage/incident reports against inventory items
+  </Card>
+  <Card title="Dashboard" icon="chart-bar">
+    Aggregate counters and recent activity feed
+  </Card>
+</CardGroup>
+
+---
+
+## Login module
+
+`02_procedimientos_Login.sql`
+
+<AccordionGroup>
+
+  <Accordion title="sp_login_usuario — Authenticate a user">
+
+  Validates a user's credentials and returns their profile on success, or a descriptive error message on failure.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_matricula` | IN | `VARCHAR(50)` | User's enrollment ID |
+  | `p_password` | IN | `VARCHAR(255)` | Plain-text password (hashed internally) |
+
+  **Returns on success:** `success=1`, `message`, `id_usuario`, `matricula`, `id_rol`, `id_turno`, `nombre`, `apellido_paterno`, `apellido_materno`
+
+  **Returns on failure:** `success=0`, `message` (`'Usuario no encontrado o inactivo'` or `'Contraseña incorrecta'`)
+
+  ```sql
+  CREATE PROCEDURE sp_login_usuario(
+      IN p_matricula VARCHAR(50),
+      IN p_password VARCHAR(255)
+  )
+  BEGIN
+      DECLARE v_password_hash VARCHAR(64);
+      DECLARE v_id_usuario INT;
+
+      -- Buscar usuario activo
+      SELECT id_usuario, password_hash
+      INTO v_id_usuario, v_password_hash
+      FROM tbl_usuarios
+      WHERE matricula = p_matricula
+        AND id_estatus = 'Activo'
+      LIMIT 1;
+
+      -- Si no existe usuario activo
+      IF v_id_usuario IS NULL THEN
+          SELECT 
+              0 AS success,
+              'Usuario no encontrado o inactivo' AS message;
+      ELSE
+          -- Comparar hash
+          IF v_password_hash = SHA2(p_password, 256) THEN
+
+              SELECT 
+                  1 AS success,
+                  'Login correcto' AS message,
+                  u.id_usuario,
+                  u.matricula,
+                  u.id_rol,
+                  u.id_turno,
+                  p.nombre,
+                  p.apellido_paterno,
+                  p.apellido_materno
+              FROM tbl_usuarios u
+              INNER JOIN tbl_personas p 
+                  ON p.id_persona = u.id_persona
+              WHERE u.id_usuario = v_id_usuario;
+
+          ELSE
+              SELECT 
+                  0 AS success,
+                  'Contraseña incorrecta' AS message;
+          END IF;
+      END IF;
+
+  END
+  ```
+
+  <Note>
+  Only users with `id_estatus = 'Activo'` can log in. Inactive or soft-deleted users are rejected before the password check.
+  </Note>
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Salones module
+
+`05_CRUD_ModuloSalones.sql`
+
+<AccordionGroup>
+
+  <Accordion title="sp_insertar_salon — Create a new room">
+
+  Inserts a new room inside a building. Uses a transaction and validates that the building exists and that the room name is not already taken. On success it also increments `tbl_edificios.total_salones`.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_edificio` | IN | `INT` | Target building ID |
+  | `p_tipo_salon` | IN | `VARCHAR(20)` | `'Salon'`, `'Laboratorio'`, or `'Sala'` |
+  | `p_nombre` | IN | `VARCHAR(50)` | Unique room name |
+  | `p_capacidad_personas` | IN | `INT` | Seating capacity |
+  | `p_estatus` | IN | `VARCHAR(20)` | Initial status (`'Activo'`, etc.) |
+
+  **Returns:** `mensaje` (description), `id_salon` (0 on error, new ID on success)
+
+  ```sql
+  CREATE PROCEDURE sp_insertar_salon(
+      IN p_id_edificio INT,
+      IN p_tipo_salon VARCHAR(20),
+      IN p_nombre VARCHAR(50),
+      IN p_capacidad_personas INT,
+      IN p_estatus VARCHAR(20)
+  )
+  BEGIN
+      DECLARE v_id_salon INT;
+      DECLARE v_edificio_existe INT;
+      DECLARE v_nombre_existe INT;
+      
+      DECLARE EXIT HANDLER FOR SQLEXCEPTION
+      BEGIN
+          ROLLBACK;
+          SELECT 'Error al insertar el salón' AS mensaje, 0 AS id_salon;
+      END;
+      
+      START TRANSACTION;
+      
+      SELECT COUNT(*) INTO v_edificio_existe 
+      FROM tbl_edificios 
+      WHERE id_edificio = p_id_edificio AND id_estatus = 'Activo';
+      
+      IF v_edificio_existe = 0 THEN
+          SELECT 'Error: El edificio no existe o no está activo' AS mensaje, 0 AS id_salon;
+          ROLLBACK;
+      ELSE
+          SELECT COUNT(*) INTO v_nombre_existe 
+          FROM tbl_salones 
+          WHERE nombre = p_nombre;
+          
+          IF v_nombre_existe > 0 THEN
+              SELECT 'Error: Ya existe un salón con ese nombre' AS mensaje, 0 AS id_salon;
+              ROLLBACK;
+          ELSE
+              INSERT INTO tbl_salones (
+                  id_edificio,
+                  id_tipo_salon,
+                  nombre,
+                  capacidad_personas,
+                  id_estatus
+              ) VALUES (
+                  p_id_edificio,
+                  p_tipo_salon,
+                  p_nombre,
+                  p_capacidad_personas,
+                  p_estatus
+              );
+              
+              SET v_id_salon = LAST_INSERT_ID();
+              
+              UPDATE tbl_edificios 
+              SET total_salones = total_salones + 1 
+              WHERE id_edificio = p_id_edificio;
+              
+              COMMIT;
+              
+              SELECT 'Salón agregado correctamente' AS mensaje, v_id_salon AS id_salon;
+          END IF;
+      END IF;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_actualizar_salon — Update a room">
+
+  Updates all editable fields of a room record. Validates that the room exists, the target building is active, and that the new name does not conflict with another room.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_salon` | IN | `INT` | Room to update |
+  | `p_id_edificio` | IN | `INT` | New building ID |
+  | `p_tipo_salon` | IN | `VARCHAR(20)` | New type |
+  | `p_nombre` | IN | `VARCHAR(50)` | New unique name |
+  | `p_capacidad_personas` | IN | `INT` | New capacity |
+  | `p_estatus` | IN | `VARCHAR(20)` | New status |
+
+  **Returns:** `mensaje`, `id_salon`
+
+  ```sql
+  CREATE PROCEDURE sp_actualizar_salon(
+      IN p_id_salon INT,
+      IN p_id_edificio INT,
+      IN p_tipo_salon VARCHAR(20),
+      IN p_nombre VARCHAR(50),
+      IN p_capacidad_personas INT,
+      IN p_estatus VARCHAR(20)
+  )
+  BEGIN
+      DECLARE v_edificio_existe INT;
+      DECLARE v_nombre_existe INT;
+      DECLARE v_salon_existe INT;
+      
+      DECLARE EXIT HANDLER FOR SQLEXCEPTION
+      BEGIN
+          ROLLBACK;
+          SELECT 'Error al actualizar el salón' AS mensaje, 0 AS id_salon;
+      END;
+      
+      START TRANSACTION;
+      
+      SELECT COUNT(*) INTO v_salon_existe 
+      FROM tbl_salones 
+      WHERE id_salon = p_id_salon;
+      
+      IF v_salon_existe = 0 THEN
+          SELECT 'Error: El salón no existe' AS mensaje, 0 AS id_salon;
+          ROLLBACK;
+      ELSE
+          SELECT COUNT(*) INTO v_edificio_existe 
+          FROM tbl_edificios 
+          WHERE id_edificio = p_id_edificio AND id_estatus = 'Activo';
+          
+          IF v_edificio_existe = 0 THEN
+              SELECT 'Error: El edificio no existe o no está activo' AS mensaje, 0 AS id_salon;
+              ROLLBACK;
+          ELSE
+              SELECT COUNT(*) INTO v_nombre_existe 
+              FROM tbl_salones 
+              WHERE nombre = p_nombre AND id_salon != p_id_salon;
+              
+              IF v_nombre_existe > 0 THEN
+                  SELECT 'Error: Ya existe otro salón con ese nombre' AS mensaje, 0 AS id_salon;
+                  ROLLBACK;
+              ELSE
+                  UPDATE tbl_salones 
+                  SET 
+                      id_edificio = p_id_edificio,
+                      id_tipo_salon = p_tipo_salon,
+                      nombre = p_nombre,
+                      capacidad_personas = p_capacidad_personas,
+                      id_estatus = p_estatus
+                  WHERE id_salon = p_id_salon;
+                  
+                  COMMIT;
+                  
+                  SELECT 'Salón actualizado correctamente' AS mensaje, p_id_salon AS id_salon;
+              END IF;
+          END IF;
+      END IF;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_eliminar_salon — Soft-delete a room">
+
+  Sets `id_estatus = 'Eliminado'` on the specified room. Rejects the operation if the room does not exist or is already deleted.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_salon` | IN | `INT` | Room to delete |
+
+  **Returns:** `mensaje`
+
+  ```sql
+  CREATE PROCEDURE sp_eliminar_salon(
+      IN p_id_salon INT
+  )
+  BEGIN
+      DECLARE v_salon_existe INT;
+      DECLARE v_estatus_actual VARCHAR(20);
+      
+      DECLARE EXIT HANDLER FOR SQLEXCEPTION
+      BEGIN
+          ROLLBACK;
+          SELECT 'Error al eliminar el salón' AS mensaje;
+      END;
+      
+      START TRANSACTION;
+      
+      SELECT COUNT(*), id_estatus INTO v_salon_existe, v_estatus_actual
+      FROM tbl_salones 
+      WHERE id_salon = p_id_salon
+      GROUP BY id_estatus;
+      
+      IF v_salon_existe = 0 THEN
+          SELECT 'Error: El salón no existe' AS mensaje;
+          ROLLBACK;
+      ELSE
+          IF v_estatus_actual = 'Eliminado' THEN
+              SELECT 'El salón ya se encuentra eliminado' AS mensaje;
+              ROLLBACK;
+          ELSE
+              UPDATE tbl_salones 
+              SET id_estatus = 'Eliminado'
+              WHERE id_salon = p_id_salon;
+              
+              COMMIT;
+              
+              SELECT 'Salón eliminado correctamente' AS mensaje;
+          END IF;
+      END IF;
+  END
+  ```
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Inventario module
+
+`03_Modulo_inventarioGeneral.sql`
+
+<AccordionGroup>
+
+  <Accordion title="sp_registrar_inventario — Register a new inventory item">
+
+  Creates a new furniture/equipment record. Validates that the `id_mobiliario` code is unique and that the specified room belongs to the specified building before inserting.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_salon` | IN | `INT` | Room assignment |
+  | `p_id_mobiliario` | IN | `VARCHAR(10)` | Unique asset code (e.g. `MOB001`) |
+  | `p_id_edificio` | IN | `INT` | Building assignment |
+  | `p_id_ubicacion` | IN | `ENUM('Edificio','Administracion')` | Physical location type |
+  | `p_id_tipo_mobi` | IN | `ENUM(...)` | Furniture type |
+  | `p_id_categoria_mobi` | IN | `ENUM(...)` | Category |
+  | `p_id_estatus` | IN | `ENUM('Activo','Inactivo','Eliminado')` | Lifecycle status |
+  | `p_id_estatus_actual` | IN | `ENUM('Disponible','En uso')` | Operational state |
+  | `p_observaciones` | IN | `TEXT` | Free-text notes |
+
+  **Returns:** `mensaje`
+
+  ```sql
+  CREATE PROCEDURE sp_registrar_inventario(
+      IN p_id_salon INT,
+      IN p_id_mobiliario VARCHAR(10),
+      IN p_id_edificio INT,
+      IN p_id_ubicacion ENUM('Edificio','Administracion'),
+      IN p_id_tipo_mobi ENUM('Silla','Mesa','Pizarron','Ventana','Cañon','Pantalla','Extension','HDMI','Proyector'),
+      IN p_id_categoria_mobi ENUM('Tecnología','Cables','Eléctrico','Papelería'),
+      IN p_id_estatus ENUM('Activo','Inactivo','Eliminado'),
+      IN p_id_estatus_actual ENUM('Disponible','En uso'),
+      IN p_observaciones TEXT
+  )
+  BEGIN
+      DECLARE v_existe_relacion INT;
+      DECLARE v_existe_mobiliario INT;
+
+      SELECT COUNT(*) INTO v_existe_mobiliario 
+      FROM tbl_inventario 
+      WHERE id_mobiliario = p_id_mobiliario;
+
+      IF v_existe_mobiliario > 0 THEN
+          SIGNAL SQLSTATE '45000' 
+          SET MESSAGE_TEXT = 'Error: El ID de mobiliario ya existe en el sistema.';
+      ELSE
+          SELECT COUNT(*) INTO v_existe_relacion 
+          FROM tbl_salones 
+          WHERE id_salon = p_id_salon AND id_edificio = p_id_edificio;
+
+           IF v_existe_relacion > 0 THEN
+              INSERT INTO tbl_inventario (
+                  id_salon, id_mobiliario, id_edificio, id_ubicacion,
+                  id_tipo_mobi, id_categoria_mobi, id_estatus,
+                  id_estatus_actual, observaciones
+              ) 
+              VALUES (
+                  p_id_salon, p_id_mobiliario, p_id_edificio, p_id_ubicacion,
+                  p_id_tipo_mobi, p_id_categoria_mobi, p_id_estatus,
+                  p_id_estatus_actual, p_observaciones
+              );
+              
+              SELECT 'Registro insertado con éxito' AS mensaje;
+          ELSE
+              SIGNAL SQLSTATE '45000' 
+              SET MESSAGE_TEXT = 'Error: El salón no pertenece al edificio seleccionado.';
+           END IF;
+      END IF;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_actualizar_Inventario — Update an item's operational status">
+
+  Updates only `id_estatus_actual` on an inventory record (switches between `'Disponible'` and `'En uso'`).
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_inventario` | IN | `INT` | Inventory item ID |
+  | `p_estatus_actual` | IN | `VARCHAR(20)` | New operational status |
+
+  ```sql
+  CREATE PROCEDURE sp_actualizar_Inventario(
+      IN p_id_inventario INT,
+      IN p_estatus_actual VARCHAR(20)
+  )
+  BEGIN
+      UPDATE tbl_inventario 
+      SET id_estatus_actual = p_estatus_actual
+      WHERE id_inventario = p_id_inventario;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_eliminar_Inventario — Soft-delete an inventory item">
+
+  Sets `id_estatus = 'Eliminado'` on the specified item.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_inventario` | IN | `INT` | Inventory item ID |
+
+  ```sql
+  CREATE PROCEDURE sp_eliminar_Inventario(
+      IN p_id_inventario INT
+  )
+  BEGIN
+      UPDATE tbl_inventario 
+      SET id_estatus = 'Eliminado'
+      WHERE id_inventario = p_id_inventario;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_getDetalleInventarioPorTipo — Get inventory detail by furniture type">
+
+  Returns all active inventory items of a given type, joined with their room and building information.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_tipo_mobi` | IN | `VARCHAR(50)` | Furniture type to filter by (e.g. `'Silla'`) |
+
+  ```sql
+  CREATE PROCEDURE sp_getDetalleInventarioPorTipo(
+      IN p_tipo_mobi VARCHAR(50) 
+  )
+  BEGIN
+      SELECT
+          i.id_inventario,
+          i.id_mobiliario,
+          i.id_tipo_mobi,
+          i.id_categoria_mobi,
+          i.observaciones,
+          i.id_estatus_actual,
+          s.nombre AS nombre_salon,
+          s.capacidad_personas,
+          e.nombre AS nombre_edificio,
+          e.ubicacion
+      FROM tbl_inventario AS i 
+      INNER JOIN tbl_salones AS s ON i.id_salon = s.id_salon
+      RIGHT JOIN tbl_edificios AS e ON s.id_edificio = e.id_edificio
+      WHERE i.id_estatus = 'Activo'
+      AND i.id_tipo_mobi = p_tipo_mobi; 
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_getEdificiosActivos — List active buildings">
+
+  Returns the ID and name of every active building, sorted alphabetically. Used to populate dropdowns in the inventory registration form.
+
+  ```sql
+  CREATE PROCEDURE sp_getEdificiosActivos()
+  BEGIN
+      SELECT id_edificio, nombre 
+      FROM tbl_edificios 
+      WHERE id_estatus = 'Activo'
+      ORDER BY nombre ASC;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_getSalonesPorEdificio — List active rooms in a building">
+
+  Returns the ID, name, and type of every active room in a given building. Used to populate the room dropdown after a building is selected.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_edificio` | IN | `INT` | Building ID |
+
+  ```sql
+  CREATE PROCEDURE sp_getSalonesPorEdificio(IN p_id_edificio INT)
+  BEGIN
+      SELECT id_salon, nombre, id_tipo_salon 
+      FROM tbl_salones 
+      WHERE id_edificio = p_id_edificio 
+        AND id_estatus = 'Activo'
+      ORDER BY nombre ASC;
+  END
+  ```
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Reservaciones module
+
+`04_Modulo_Reservaciones.sql`
+
+<AccordionGroup>
+
+  <Accordion title="sp_insertar_reservacion — Create a reservation">
+
+  Inserts a new reservation record. When this insert fires, the trigger `trg_nueva_reservacion` automatically writes an entry to `tbl_bitacora`.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_usuario` | IN | `INT` | User making the reservation |
+  | `p_id_salon` | IN | `INT` | Room being reserved |
+  | `p_fecha_hora` | IN | `DATETIME` | Reservation date and time |
+  | `p_estatus` | IN | `VARCHAR(20)` | Initial status (typically `'Pendiente'`) |
+
+  ```sql
+  CREATE PROCEDURE sp_insertar_reservacion(
+      IN p_id_usuario INT,
+      IN p_id_salon INT,
+      IN p_fecha_hora DATETIME,
+      IN p_estatus VARCHAR(20)
+  )
+  BEGIN
+      INSERT INTO tbl_reservaciones (id_usuario, id_salon, fecha_hora, estatus)
+      VALUES (p_id_usuario, p_id_salon, p_fecha_hora, p_estatus);
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_actualizar_reservacion — Update a reservation">
+
+  Replaces all fields of an existing reservation record.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_reserva` | IN | `INT` | Reservation to update |
+  | `p_id_usuario` | IN | `INT` | User ID |
+  | `p_id_salon` | IN | `INT` | Room ID |
+  | `p_fecha_hora` | IN | `DATETIME` | New date/time |
+  | `p_estatus` | IN | `VARCHAR(20)` | New status |
+
+  ```sql
+  CREATE PROCEDURE sp_actualizar_reservacion(
+      IN p_id_reserva INT,
+      IN p_id_usuario INT,
+      IN p_id_salon INT,
+      IN p_fecha_hora DATETIME,
+      IN p_estatus VARCHAR(20)
+  )
+  BEGIN
+      UPDATE tbl_reservaciones
+      SET id_usuario = p_id_usuario,
+          id_salon   = p_id_salon,
+          fecha_hora = p_fecha_hora,
+          estatus    = p_estatus
+      WHERE id_reserva = p_id_reserva;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_eliminar_reservacion — Soft-delete a reservation">
+
+  Marks a reservation as `'Eliminado'` instead of physically removing it.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_reserva` | IN | `INT` | Reservation to delete |
+
+  ```sql
+  CREATE PROCEDURE sp_eliminar_reservacion(IN p_id_reserva INT)
+  BEGIN
+      UPDATE tbl_reservaciones SET estatus = 'Eliminado' WHERE id_reserva = p_id_reserva;
+  END
+  ```
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Préstamos module
+
+`08_Modulo_Prestamos.sql`
+
+<AccordionGroup>
+
+  <Accordion title="sp_insertar_prestamo — Create an equipment loan">
+
+  Resolves the user by their `matricula` and the inventory item by its `id_mobiliario` code, then inserts the loan record with status `'Activo'`. Raises a SQLSTATE `45000` error if either lookup fails.
+
+  After the insert, the trigger `tg_actualizar_inventario_salida` automatically sets `id_estatus_actual = 'En Uso'` on the borrowed item.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_matricula` | IN | `VARCHAR(25)` | Borrower's enrollment ID |
+  | `p_id_mobiliario_text` | IN | `VARCHAR(25)` | Asset code of the item being lent |
+  | `p_fecha_prevista` | IN | `DATETIME` | Expected return date/time |
+  | `p_obs_salida` | IN | `TEXT` | Condition notes at check-out |
+
+  ```sql
+  CREATE PROCEDURE sp_insertar_prestamo(
+      IN p_matricula VARCHAR(25),
+      IN p_id_mobiliario_text VARCHAR(25),
+      IN p_fecha_prevista DATETIME,
+      IN p_obs_salida TEXT
+  )
+  BEGIN
+      DECLARE v_id_usuario INT;
+      DECLARE v_id_inv INT;
+
+      SELECT id_usuario INTO v_id_usuario 
+      FROM tbl_usuarios 
+      WHERE matricula = p_matricula LIMIT 1;
+
+      SELECT id_inventario INTO v_id_inv 
+      FROM tbl_inventario 
+      WHERE id_mobiliario = p_id_mobiliario_text LIMIT 1;
+
+      IF v_id_usuario IS NOT NULL AND v_id_inv IS NOT NULL THEN
+          INSERT INTO tbl_prestamos_mobiliario (
+              id_usuario, 
+              id_inventario, 
+              fecha_devolucion_prevista, 
+              observaciones_salida, 
+              estatus_prestamo
+          )
+          VALUES (v_id_usuario, v_id_inv, p_fecha_prevista, p_obs_salida, 'Activo');
+      ELSE
+          SIGNAL SQLSTATE '45000'
+          SET MESSAGE_TEXT = 'Error: Usuario o Mobiliario no encontrado';
+      END IF;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_actualizar_estatus_prestamo — Update a loan's status">
+
+  Changes the status of a loan (e.g. to `'Devuelto'`, `'Atrasado'`, `'Extraviado'`). When the new status is `'Devuelto'`, `fecha_devolucion_real` is automatically set to the current timestamp.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_prestamo` | IN | `INT` | Loan record ID |
+  | `p_nuevo_estatus` | IN | `ENUM('Activo','Devuelto','Atrasado','Extraviado','Eliminado')` | New status |
+  | `p_observaciones_entrada` | IN | `TEXT` | Condition notes at return |
+
+  **Returns:** `mensaje`, `id`
+
+  ```sql
+  CREATE PROCEDURE sp_actualizar_estatus_prestamo(
+      IN p_id_prestamo INT,
+      IN p_nuevo_estatus ENUM('Activo', 'Devuelto', 'Atrasado', 'Extraviado', 'Eliminado'),
+      IN p_observaciones_entrada TEXT
+  )
+  BEGIN
+      DECLARE v_fecha_devolucion DATETIME DEFAULT NULL;
+
+      IF p_nuevo_estatus = 'Devuelto' THEN
+          SET v_fecha_devolucion = NOW();
+      END IF;
+
+      UPDATE tbl_prestamos_mobiliario
+      SET 
+          estatus_prestamo       = p_nuevo_estatus,
+          observaciones_entrada  = p_observaciones_entrada,
+          fecha_devolucion_real  = IF(p_nuevo_estatus = 'Devuelto', v_fecha_devolucion, fecha_devolucion_real)
+      WHERE id_prestamo = p_id_prestamo;
+
+      SELECT 'Préstamo actualizado correctamente' AS mensaje, p_id_prestamo AS id;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="sp_eliminar_Prestamo — Soft-delete a loan">
+
+  Marks a loan as `'Eliminado'`.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_prestamo` | IN | `INT` | Loan record ID |
+
+  ```sql
+  CREATE PROCEDURE sp_eliminar_Prestamo(
+      IN p_id_prestamo INT
+  )
+  BEGIN
+      UPDATE tbl_prestamos_mobiliario
+      SET estatus_prestamo = 'Eliminado'
+      WHERE id_inventario = p_id_prestamo;
+  END
+  ```
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Reportes module
+
+`07_Modulo_Reportes.sql`
+
+<AccordionGroup>
+
+  <Accordion title="sp_insertar_reporte_mobiliario — Create a damage report">
+
+  Inserts a new report against an inventory item. Every insert is kept — history is never overwritten. A new insert also fires the `trg_nuevo_reporte` trigger, which logs the event to `tbl_bitacora`.
+
+  | Parameter | Direction | Type | Description |
+  |-----------|-----------|------|-------------|
+  | `p_id_usuario` | IN | `INT` | User submitting the report |
+  | `p_id_inventario` | IN | `INT` | Affected inventory item |
+  | `p_id_tipo_reporte` | IN | `VARCHAR(100)` | Report type (damage category) |
+  | `p_descripcion` | IN | `TEXT` | Detailed description |
+  | `p_id_prioridad` | IN | `VARCHAR(20)` | `'Baja'`, `'Media'`, `'Alta'`, or `'Critica'` |
+  | `p_id_estatus_reporte` | IN | `VARCHAR(50)` | Initial status (usually `'Pendiente'`) |
+
+  ```sql
+  CREATE PROCEDURE sp_insertar_reporte_mobiliario(
+      IN p_id_usuario INT,
+      IN p_id_inventario INT,
+      IN p_id_tipo_reporte VARCHAR(100),
+      IN p_descripcion TEXT,
+      IN p_id_prioridad VARCHAR(20),
+      IN p_id_estatus_reporte VARCHAR(50)
+  )
+  BEGIN
+      INSERT INTO tbl_reportes_mobiliario (
+          id_usuario, id_inventario, id_tipo_reporte, 
+          descripcion, id_prioridad, id_estatus_reporte
+      ) VALUES (
+          p_id_usuario, p_id_inventario, p_id_tipo_reporte, 
+          p_descripcion, p_id_prioridad, p_id_estatus_reporte
+      );
+  END
+  ```
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Dashboard module
+
+`06_Sp_triggers_NewTablaBitacora_Dashboard.sql`
+
+The dashboard module provides aggregate counters consumed by the home screen widgets, plus the `spActividadReciente` procedure that feeds the activity feed.
+
+<AccordionGroup>
+
+  <Accordion title="spTotalInventario — Count all inventory items">
+
+  Returns the total number of rows in `tbl_inventario` (including inactive and deleted records).
+
+  ```sql
+  CREATE PROCEDURE spTotalInventario()
+  BEGIN
+      SELECT COUNT(*) AS totalMobiliario
+      FROM tbl_inventario;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="spTotalUsuarios — Count all users">
+
+  Returns the total number of user accounts in `tbl_usuarios`.
+
+  ```sql
+  CREATE PROCEDURE spTotalUsuarios()
+  BEGIN
+      SELECT COUNT(*) AS totalUsuarios
+      FROM tbl_usuarios;
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="spTotalReportes — Count reports in the last 7 days">
+
+  Returns the number of report history entries (`tbl_historial_reporte`) created in the last week. This is the value shown as the weekly report counter on the dashboard.
+
+  ```sql
+  CREATE PROCEDURE spTotalReportes()
+  BEGIN
+      SELECT COUNT(*) AS reportesSemanal
+      FROM tbl_historial_reporte
+      WHERE fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY);
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="spContarReservacionesActivas — Count active reservations">
+
+  Returns the number of reservations with `estatus = 'Activo'`.
+
+  ```sql
+  CREATE PROCEDURE spContarReservacionesActivas()
+  BEGIN
+      SELECT COUNT(*) AS Activas
+      FROM tbl_reservaciones
+      WHERE estatus = 'Activo';
+  END
+  ```
+
+  </Accordion>
+
+  <Accordion title="spActividadReciente — Fetch recent activity">
+
+  Returns the five most recent entries from `tbl_bitacora`, ordered by descending timestamp. This is the procedure that powers the activity feed widget on the dashboard.
+
+  ```sql
+  CREATE PROCEDURE spActividadReciente()
+  BEGIN
+      SELECT titulo, descripcion, fecha_actividad, autor
+      FROM tbl_bitacora
+      ORDER BY fecha_actividad DESC
+      LIMIT 5;
+  END
+  ```
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Triggers
+
+Three triggers keep `tbl_bitacora` and `tbl_inventario` synchronized automatically without requiring any application-layer logic.
+
+<AccordionGroup>
+
+  <Accordion title="trg_nueva_reservacion — Log new reservations">
+
+  Fires **AFTER INSERT** on `tbl_reservaciones`. Looks up the room name and the author's full name, then appends a row to `tbl_bitacora`.
+
+  ```sql
+  CREATE TRIGGER trg_nueva_reservacion
+  AFTER INSERT ON tbl_reservaciones
+  FOR EACH ROW
+  BEGIN
+      DECLARE v_nombre_salon VARCHAR(50);
+      DECLARE v_autor VARCHAR(100);
+      
+      SELECT nombre INTO v_nombre_salon
+      FROM tbl_salones
+      WHERE id_salon = NEW.id_salon;
+      
+      SELECT CONCAT(u.matricula, ' - ', p.nombre, ' ', p.apellido_paterno) INTO v_autor
+      FROM tbl_usuarios u
+      INNER JOIN tbl_personas p ON u.id_persona = p.id_persona
+      WHERE u.id_usuario = NEW.id_usuario;
+      
+      INSERT INTO tbl_bitacora (titulo, descripcion, autor)
+      VALUES (
+          'Nueva reservación',
+          CONCAT('Se reservó el salón: ', v_nombre_salon, ' para la fecha: ', NEW.fecha_hora),
+          v_autor
+      );
+  END
+  ```
+
+  **Bitácora entry format:**
+  - `titulo`: `'Nueva reservación'`
+  - `descripcion`: `'Se reservó el salón: <nombre> para la fecha: <fecha_hora>'`
+  - `autor`: `'<matricula> - <nombre> <apellido_paterno>'`
+
+  </Accordion>
+
+  <Accordion title="trg_nuevo_reporte — Log new damage reports">
+
+  Fires **AFTER INSERT** on `tbl_reportes_mobiliario`. Looks up the author's identity and appends a row to `tbl_bitacora` with the report type.
+
+  ```sql
+  CREATE TRIGGER trg_nuevo_reporte
+  AFTER INSERT ON tbl_reportes_mobiliario
+  FOR EACH ROW
+  BEGIN
+      DECLARE v_autor VARCHAR(100);
+      
+      SELECT CONCAT(u.matricula, ' - ', p.nombre, ' ', p.apellido_paterno) INTO v_autor
+      FROM tbl_usuarios u
+      INNER JOIN tbl_personas p ON u.id_persona = p.id_persona
+      WHERE u.id_usuario = NEW.id_usuario;
+      
+      INSERT INTO tbl_bitacora (titulo, descripcion, autor)
+      VALUES (
+          'Nuevo reporte creado',
+          CONCAT('Tipo: ', NEW.id_tipo_reporte),
+          v_autor
+      );
+  END
+  ```
+
+  **Bitácora entry format:**
+  - `titulo`: `'Nuevo reporte creado'`
+  - `descripcion`: `'Tipo: <id_tipo_reporte>'`
+  - `autor`: `'<matricula> - <nombre> <apellido_paterno>'`
+
+  </Accordion>
+
+  <Accordion title="tg_actualizar_inventario_salida — Mark item as in use on loan">
+
+  Fires **AFTER INSERT** on `tbl_prestamos_mobiliario`. Immediately updates the borrowed item's `id_estatus_actual` to `'En Uso'` in `tbl_inventario`.
+
+  ```sql
+  CREATE TRIGGER tg_actualizar_inventario_salida
+  AFTER INSERT ON tbl_prestamos_mobiliario
+  FOR EACH ROW
+  BEGIN
+      UPDATE tbl_inventario
+      SET id_estatus_actual = 'En Uso'
+      WHERE id_inventario = NEW.id_inventario;
+  END
+  ```
+
+  <Info>
+  The reverse transition — setting `id_estatus_actual` back to `'Disponible'` on return — is not handled by a trigger. It must be managed at the application level when `sp_actualizar_estatus_prestamo` is called with `p_nuevo_estatus = 'Devuelto'`.
+  </Info>
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Quick reference
+
+| Procedure / Trigger | Module | Operation |
+|---------------------|--------|-----------|
+| `sp_login_usuario` | Login | Authenticate user with SHA-256 |
+| `sp_insertar_salon` | Salones | Create room (transactional) |
+| `sp_actualizar_salon` | Salones | Update room (transactional) |
+| `sp_eliminar_salon` | Salones | Soft-delete room |
+| `sp_registrar_inventario` | Inventario | Register new furniture item |
+| `sp_actualizar_Inventario` | Inventario | Change item operational status |
+| `sp_eliminar_Inventario` | Inventario | Soft-delete inventory item |
+| `sp_getDetalleInventarioPorTipo` | Inventario | Query items by type |
+| `sp_getEdificiosActivos` | Inventario | List active buildings |
+| `sp_getSalonesPorEdificio` | Inventario | List active rooms in a building |
+| `sp_insertar_reservacion` | Reservaciones | Create reservation |
+| `sp_actualizar_reservacion` | Reservaciones | Update reservation |
+| `sp_eliminar_reservacion` | Reservaciones | Soft-delete reservation |
+| `sp_insertar_prestamo` | Préstamos | Check out an item by matricula + asset code |
+| `sp_actualizar_estatus_prestamo` | Préstamos | Update loan status / record return |
+| `sp_eliminar_Prestamo` | Préstamos | Soft-delete loan |
+| `sp_insertar_reporte_mobiliario` | Reportes | Create damage report |
+| `spTotalInventario` | Dashboard | Count all inventory items |
+| `spTotalUsuarios` | Dashboard | Count all users |
+| `spTotalReportes` | Dashboard | Count report history rows (last 7 days) |
+| `spContarReservacionesActivas` | Dashboard | Count active reservations |
+| `spActividadReciente` | Dashboard | Fetch 5 most recent bitácora entries |
+| `trg_nueva_reservacion` | Trigger | Write to bitácora on new reservation |
+| `trg_nuevo_reporte` | Trigger | Write to bitácora on new damage report |
+| `tg_actualizar_inventario_salida` | Trigger | Mark inventory item as in use on loan |

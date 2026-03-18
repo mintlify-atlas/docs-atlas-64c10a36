@@ -1,0 +1,330 @@
+---
+title: "Usuarios"
+description: "Endpoints for user authentication and CRUD management in GAM."
+---
+
+# Usuarios
+
+Base path: `/usuario`
+
+Manages authentication and the full lifecycle of user accounts. Each user combines a system account record (`tbl_usuarios`) with a personal data record (`tbl_personas`).
+
+---
+
+## POST /usuario/login
+
+Authenticates a user with their institutional ID (`matricula`) and password. Returns the full user object on success.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="matricula" type="string" required>
+  Institutional ID of the user (e.g. `"A12345"`).
+</ParamField>
+
+<ParamField body="contrasenia" type="string" required>
+  Plain-text password. The backend controller handles verification.
+</ParamField>
+
+### Response — 200 OK
+
+<ResponseField name="id_usuario" type="integer">
+  Internal user identifier.
+</ResponseField>
+
+<ResponseField name="matricula" type="string">
+  Institutional ID.
+</ResponseField>
+
+<ResponseField name="id_rol" type="string">
+  Role string, e.g. `"Administrador"` or `"Docente"`.
+</ResponseField>
+
+<ResponseField name="id_turno" type="string">
+  Shift, e.g. `"Matutino"` or `"Vespertino"`.
+</ResponseField>
+
+<ResponseField name="id_estatus" type="string">
+  Account status: `"Activo"`, `"Inactivo"`, or `"Eliminado"`.
+</ResponseField>
+
+<ResponseField name="id_persona" type="integer">
+  Foreign key to the personal data record.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  First name.
+</ResponseField>
+
+<ResponseField name="apellido_paterno" type="string">
+  Paternal surname.
+</ResponseField>
+
+<ResponseField name="apellido_materno" type="string">
+  Maternal surname.
+</ResponseField>
+
+<ResponseField name="correo" type="string">
+  Email address.
+</ResponseField>
+
+<ResponseField name="telefono" type="string">
+  Phone number.
+</ResponseField>
+
+<ResponseField name="fecha_nacimiento" type="string">
+  Date of birth (string as stored, e.g. `"1999-05-20"`).
+</ResponseField>
+
+<ResponseField name="direccion" type="string">
+  Home address.
+</ResponseField>
+
+### Response — 401 Unauthorized
+
+```json
+{"error": "Credenciales inválidas o usuario inactivo."}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "Error interno del servidor. Intente más tarde."}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/usuario/login \
+  -H "Content-Type: application/json" \
+  -d '{"matricula": "A12345", "contrasenia": "secreto"}'
+```
+
+---
+
+## GET /usuario/getAll
+
+Returns all user records.
+
+### Response — 200 OK
+
+An array of user objects. Each object has the same fields as the login response (see above), except `contrasenia` is not included in list responses.
+
+```json
+[
+  {
+    "id_usuario": 1,
+    "matricula": "A12345",
+    "id_rol": "Administrador",
+    "id_turno": "Matutino",
+    "id_estatus": "Activo",
+    "id_persona": 1,
+    "nombre": "Juan",
+    "apellido_paterno": "García",
+    "apellido_materno": "López",
+    "correo": "juan@utl.edu.mx",
+    "telefono": "5551234567",
+    "fecha_nacimiento": "1990-01-15",
+    "direccion": "Calle 5, Col. Centro"
+  }
+]
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "Error al consultar los usuarios."}
+```
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/usuario/getAll
+```
+
+---
+
+## POST /usuario/insertar
+
+Creates a new user account along with a personal data record.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="matricula" type="string" required>
+  Institutional ID for the new account.
+</ParamField>
+
+<ParamField body="contrasenia" type="string" required>
+  Password for the new account.
+</ParamField>
+
+<ParamField body="id_rol" type="string" required>
+  Role, e.g. `"Administrador"`, `"Docente"`.
+</ParamField>
+
+<ParamField body="id_turno" type="string" required>
+  Shift, e.g. `"Matutino"`, `"Vespertino"`.
+</ParamField>
+
+<ParamField body="id_estatus" type="string">
+  Account status. Defaults to `"Activo"` if omitted.
+</ParamField>
+
+<ParamField body="nombre" type="string" required>
+  First name.
+</ParamField>
+
+<ParamField body="apellido_paterno" type="string" required>
+  Paternal surname.
+</ParamField>
+
+<ParamField body="apellido_materno" type="string">
+  Maternal surname.
+</ParamField>
+
+<ParamField body="correo" type="string" required>
+  Email address.
+</ParamField>
+
+<ParamField body="telefono" type="string">
+  Phone number.
+</ParamField>
+
+<ParamField body="fecha_nacimiento" type="string">
+  Date of birth as a string, e.g. `"1990-01-15"`.
+</ParamField>
+
+<ParamField body="direccion" type="string">
+  Home address.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"mensaje": "Usuario registrado correctamente."}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "Error al registrar el usuario."}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/usuario/insertar \
+  -H "Content-Type: application/json" \
+  -d '{
+    "matricula": "B99001",
+    "contrasenia": "pass123",
+    "id_rol": "Docente",
+    "id_turno": "Matutino",
+    "id_estatus": "Activo",
+    "nombre": "María",
+    "apellido_paterno": "Hernández",
+    "apellido_materno": "Ruiz",
+    "correo": "maria@utl.edu.mx",
+    "telefono": "5559876543",
+    "fecha_nacimiento": "1995-03-10",
+    "direccion": "Av. Universidad 1"
+  }'
+```
+
+---
+
+## POST /usuario/modificar
+
+Updates an existing user's information. The `id_usuario` field identifies which record to update.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+Same structure as `/usuario/insertar`, with the addition of:
+
+<ParamField body="id_usuario" type="integer" required>
+  ID of the user to update.
+</ParamField>
+
+<Note>
+  The password (`contrasenia`) is not updated through this endpoint. When editing an existing user from the front-end, the password field is hidden and not sent.
+</Note>
+
+### Response — 200 OK
+
+```json
+{"mensaje": "Usuario modificado correctamente."}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "Error al modificar el usuario."}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/usuario/modificar \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id_usuario": 5,
+    "matricula": "B99001",
+    "id_rol": "Administrador",
+    "id_turno": "Vespertino",
+    "id_estatus": "Activo",
+    "nombre": "María",
+    "apellido_paterno": "Hernández",
+    "apellido_materno": "Ruiz",
+    "correo": "maria@utl.edu.mx",
+    "telefono": "5559876543",
+    "fecha_nacimiento": "1995-03-10",
+    "direccion": "Av. Universidad 1"
+  }'
+```
+
+---
+
+## POST /usuario/eliminar
+
+Soft-deletes a user by changing their `id_estatus` to `"Eliminado"`. The record is not physically removed.
+
+<Note>
+  This endpoint uses `application/x-www-form-urlencoded`, **not** JSON. The `id_usuario` is sent as a form parameter.
+</Note>
+
+**Content-Type:** `application/x-www-form-urlencoded`
+
+### Request Parameters
+
+<ParamField body="id_usuario" type="integer" required>
+  ID of the user to soft-delete.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"mensaje": "Usuario eliminado correctamente."}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "Error al eliminar el usuario."}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/usuario/eliminar \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d 'id_usuario=5'
+```

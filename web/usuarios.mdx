@@ -1,0 +1,149 @@
+---
+title: "Usuarios"
+description: "Manage the full user directory including roles, shifts, and account lifecycle."
+---
+
+The Usuarios module (`administrador/usuarios.html`) is the directory for all personnel and students registered in GAM. It supports creating, editing, viewing details, and disabling/deleting accounts.
+
+## Authentication model
+
+GAM uses a **matricula-based** authentication model. Each user is identified by a unique institutional matricula string (e.g., `2024ADM01`). The matricula is used both as the login credential and as the primary human-readable identifier throughout the system (reservations, loans, reports all reference the matricula, not the numeric `id_usuario`).
+
+Passwords are sent in plaintext from the browser to the API; the backend is responsible for hashing them before persistence.
+
+<Note>
+  When editing an existing user the password field is hidden and left blank — the backend `modificar` endpoint does not update the password, preserving the stored hash.
+</Note>
+
+## Summary cards
+
+Four counters update on every data load:
+
+| Card | Condition |
+|---|---|
+| Usuarios Activos | `id_estatus = 'Activo'` |
+| Usuarios Inactivos | `id_estatus = 'Inactivo'` |
+| Bajas (Eliminados) | `id_estatus = 'Eliminado'` |
+| Total Usuarios | All records |
+
+## Table columns
+
+| Column | Source field | Notes |
+|---|---|---|
+| Matrícula | `u.matricula` | Bold secondary color |
+| Nombre Completo | `nombre + apellido_paterno + apellido_materno` | — |
+| Rol | `u.id_rol` | — |
+| Turno | `u.id_turno` | — |
+| Estatus | `u.id_estatus` | Green / grey / red badge |
+| Acciones | — | Edit, Delete, View |
+
+## Filters
+
+| Filter | Options |
+|---|---|
+| Rol | Administrador, Docente, Alumno, Mantenimiento |
+| Turno | Matutino, Vespertino, Mixto |
+| Estatus | Activo, Inactivo, Eliminado |
+
+Filters are applied client-side against `todosLosUsuarios` without an extra API request.
+
+## User form fields
+
+Both **Agregar** and **Editar** use the same `#modalUsuario` dialog. Fields marked `*` are required:
+
+<Tabs>
+  <Tab title="Datos Personales">
+    | Field | ID | Type | Required |
+    |---|---|---|---|
+    | Nombre(s) | `uNombre` | text | Yes |
+    | Apellido Paterno | `uApPaterno` | text | Yes |
+    | Apellido Materno | `uApMaterno` | text | Yes |
+    | Correo Electrónico | `uCorreo` | email | Yes |
+    | Teléfono | `uTelefono` | text | No |
+    | Fecha de Nacimiento | `uFechaNac` | date | Yes |
+    | Dirección | `uDireccion` | text | No |
+  </Tab>
+  <Tab title="Datos de la Cuenta">
+    | Field | ID | Type | Required |
+    |---|---|---|---|
+    | Matrícula | `uMatricula` | text | Yes |
+    | Contraseña | `uContrasenia` | password | Yes (new only) |
+    | Rol | `uRol` | select | Yes |
+    | Turno | `uTurno` | select | Yes |
+    | Estatus | `uEstatus` | select | — (defaults Activo) |
+
+    **Rol options:** Administrador, Docente, Alumno, Mantenimiento
+
+    **Turno options:** Matutino, Vespertino, Mixto
+
+    **Estatus options:** Activo, Inactivo, Eliminado
+  </Tab>
+</Tabs>
+
+## Creating a user
+
+<Steps>
+  <Step title="Open the Add User modal">
+    Click **Agregar Usuario**. The form resets, the password field is shown, and the modal title becomes *"Agregar Usuario"*.
+  </Step>
+  <Step title="Fill in personal details">
+    Enter the user's full name (nombre, apellido paterno, apellido materno), email, optional phone, birthdate, and optional address.
+  </Step>
+  <Step title="Fill in account details">
+    Enter a unique matricula, set a password, choose a role and shift, and confirm the status is `Activo`.
+  </Step>
+  <Step title="Save">
+    Click **Guardar Usuario**. The client calls `POST /api/usuario/insertar` with the full user object as JSON.
+
+    On success the modal closes and the table reloads. On error, a SweetAlert alert shows the message from the API.
+  </Step>
+</Steps>
+
+## JSON payload (insertar)
+
+```json
+{
+  "id_usuario": 0,
+  "nombre": "Juan",
+  "apellido_paterno": "García",
+  "apellido_materno": "López",
+  "correo": "juan@utl.edu.mx",
+  "telefono": "7771234567",
+  "fecha_nacimiento": "2000-05-15",
+  "direccion": "Av. Universidad 1",
+  "matricula": "2026TIC01",
+  "contrasenia": "mi_contraseña",
+  "id_rol": "Alumno",
+  "id_turno": "Matutino",
+  "id_estatus": "Activo"
+}
+```
+
+## Editing a user
+
+Click the pencil icon for any row. The modal pre-populates all fields except the password (which is hidden for edits). Saving calls `POST /api/usuario/modificar`.
+
+## Deleting / disabling a user
+
+Click the trash icon. A SweetAlert confirmation dialog reads *"¿Dar de baja usuario? El usuario pasará a estatus 'Eliminado'"*. Confirming calls `POST /api/usuario/eliminar` with `id_usuario` as a URL-encoded form parameter.
+
+<Info>
+  "Eliminating" a user in GAM is a soft delete — it sets the `id_estatus` to `'Eliminado'`. The user record is preserved and can be filtered/viewed. Login with an eliminated account is rejected by the API with *"Credenciales inválidas o usuario inactivo."*
+</Info>
+
+## Viewing user details
+
+The eye button opens `#modalDetalleUsuario` populated from the in-memory `todosLosUsuarios` array (no extra API request). It shows:
+
+- **Datos de la Cuenta:** matrícula, rol, turno, estatus badge
+- **Información Personal:** full name, email, phone, birthdate, address
+
+## API endpoints
+
+| Method | Path | Content-Type | Description |
+|---|---|---|---|
+| `POST` | `/api/usuario/login` | `application/json` | Authenticate a user |
+| `GET` | `/api/usuario/getAll` | — | List all users |
+| `POST` | `/api/usuario/insertar` | `application/json` | Create a user |
+| `POST` | `/api/usuario/modificar` | `application/json` | Update a user |
+| `POST` | `/api/usuario/eliminar` | `application/x-www-form-urlencoded` | Soft-delete by `id_usuario` |

@@ -1,80 +1,301 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Set up the full GAM stack — database, backend, and web panel — and log in for the first time."
 ---
 
-## Get started in three steps
+This guide walks you through a complete local setup: creating the `db_gam` database, deploying the Java EE backend on GlassFish, and opening the web admin panel.
 
-Get your documentation site running locally and make your first customization.
+<Warning>
+  The connection credentials in `ConexionMySQL.java` use `root` / `Melapelas2` pointing to `localhost:3306`. Update these before deploying to any shared or production environment.
+</Warning>
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- MySQL 8.x running on `localhost:3306`
+- GlassFish Server 7 (or compatible Jakarta EE 10 container)
+- NetBeans IDE 18+ with the GlassFish plugin
+- Node.js 20+ (only needed for the mobile app)
+- A modern browser (Chrome, Firefox, Edge)
 
-### Step 2: Deploy your changes
+---
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+## Setup steps
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Steps>
+  <Step title="Create the database">
+    Open MySQL Workbench, DBeaver, or the MySQL CLI and run the full schema script:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```sql
+    -- Drop and recreate the database
+    DROP DATABASE IF EXISTS db_gam;
+    CREATE DATABASE IF NOT EXISTS db_gam;
+    USE db_gam;
 
-### Step 3: Go live
+    -- Academic structure
+    CREATE TABLE tbl_div_academica (
+        id_div_academica INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        division_academica VARCHAR(45) NOT NULL
+    );
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    CREATE TABLE tbl_carreras (
+        id_carrera INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        carrera_descripcion VARCHAR(50) NOT NULL,
+        id_div_academica INT NOT NULL,
+        FOREIGN KEY (id_div_academica) REFERENCES tbl_div_academica(id_div_academica)
+    );
+
+    CREATE TABLE tbl_grupos (
+        id_grupo INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        grupo VARCHAR(50) NOT NULL,
+        descripcion_grupo VARCHAR(50) NOT NULL,
+        no_cuatrimestre INT NOT NULL,
+        id_carrera INT NOT NULL,
+        FOREIGN KEY (id_carrera) REFERENCES tbl_carreras(id_carrera)
+    );
+
+    -- People, users, and roles
+    CREATE TABLE tbl_personas (
+        id_persona INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(50) NOT NULL,
+        apellido_paterno VARCHAR(50) NOT NULL,
+        apellido_materno VARCHAR(50),
+        correo VARCHAR(100) NOT NULL UNIQUE,
+        telefono VARCHAR(50) NOT NULL,
+        fecha_nacimiento DATE NOT NULL,
+        direccion VARCHAR(100) NOT NULL
+    );
+
+    CREATE TABLE tbl_usuarios (
+        id_usuario INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id_persona INT NOT NULL,
+        matricula VARCHAR(50) NOT NULL UNIQUE,
+        password_hash CHAR(64) NOT NULL,
+        id_rol ENUM('Administrador','Coordinador','Docente','Alumno') NOT NULL,
+        id_turno ENUM('Matutino','Vespertino','Despresurizado') NOT NULL,
+        id_estatus ENUM('Activo','Inactivo','Eliminado') NOT NULL,
+        FOREIGN KEY (id_persona) REFERENCES tbl_personas(id_persona)
+            ON DELETE CASCADE ON UPDATE CASCADE
+    );
+
+    -- Physical resources
+    CREATE TABLE tbl_edificios (
+        id_edificio INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(50) NOT NULL UNIQUE,
+        id_div_academica INT NOT NULL,
+        ubicacion VARCHAR(150) NOT NULL,
+        pisos INT NOT NULL,
+        total_salones INT NOT NULL,
+        id_estatus ENUM('Activo','Inactivo','Eliminado') NOT NULL,
+        FOREIGN KEY (id_div_academica) REFERENCES tbl_div_academica(id_div_academica)
+    );
+
+    CREATE TABLE tbl_salones (
+        id_salon INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id_edificio INT NOT NULL,
+        id_tipo_salon ENUM('Salon','Laboratorio','Sala') NOT NULL,
+        nombre VARCHAR(50) NOT NULL UNIQUE,
+        capacidad_personas INT NOT NULL,
+        id_estatus ENUM('Activo','Inactivo','Eliminado') NOT NULL,
+        FOREIGN KEY (id_edificio) REFERENCES tbl_edificios(id_edificio)
+            ON DELETE CASCADE ON UPDATE CASCADE
+    );
+
+    CREATE TABLE tbl_inventario (
+        id_inventario INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id_salon INT NOT NULL,
+        id_mobiliario VARCHAR(10) NOT NULL,
+        id_edificio INT NOT NULL,
+        id_ubicacion ENUM('Edificio','Administracion'),
+        id_tipo_mobi ENUM('Silla','Mesa','Pizarron','Ventana','Cañon',
+                          'Pantalla','Extension','HDMI','Proyector') NOT NULL,
+        id_categoria_mobi ENUM('Tecnología','Cables','Eléctrico','Papelería') NOT NULL,
+        id_estatus ENUM('Activo','Inactivo','Eliminado') NOT NULL,
+        id_estatus_actual ENUM('Disponible','En uso') NOT NULL,
+        observaciones TEXT,
+        FOREIGN KEY (id_salon) REFERENCES tbl_salones(id_salon)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+        FOREIGN KEY (id_edificio) REFERENCES tbl_edificios(id_edificio)
+            ON DELETE CASCADE ON UPDATE CASCADE
+    );
+
+    -- Loans, reports, reservations, and audit log
+    CREATE TABLE tbl_prestamos_mobiliario (
+        id_prestamo INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id_usuario INT NOT NULL,
+        id_inventario INT NOT NULL,
+        fecha_salida TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        fecha_devolucion_prevista DATETIME,
+        fecha_devolucion_real DATETIME NULL,
+        estatus_prestamo ENUM('Activo','Devuelto','Atrasado','Extraviado','Eliminado')
+            DEFAULT 'Activo',
+        observaciones_salida TEXT,
+        observaciones_entrada TEXT,
+        FOREIGN KEY (id_usuario) REFERENCES tbl_usuarios(id_usuario),
+        FOREIGN KEY (id_inventario) REFERENCES tbl_inventario(id_inventario)
+    );
+
+    CREATE TABLE tbl_reportes_mobiliario (
+        id_reporte INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id_usuario INT NOT NULL,
+        id_inventario INT NOT NULL,
+        id_tipo_reporte ENUM('Daño por uso (Desgaste)','Rotura / Fractura',
+                             'Vandalismo (Rayones/Grafiti)','Mobiliario Faltante',
+                             'Mobiliario Excedente') NOT NULL,
+        descripcion TEXT NOT NULL,
+        id_prioridad ENUM('Baja','Media','Alta','Critica') NOT NULL,
+        fecha_reporte TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        id_estatus_reporte ENUM('Pendiente','En Revisión','En Reparación',
+                                'Solucionado','Rechazado','Baja Definitiva') NOT NULL,
+        FOREIGN KEY (id_usuario) REFERENCES tbl_usuarios(id_usuario),
+        FOREIGN KEY (id_inventario) REFERENCES tbl_inventario(id_inventario)
+    );
+
+    CREATE TABLE tbl_reservaciones (
+        id_reserva INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        id_usuario INT NOT NULL,
+        id_salon INT NOT NULL,
+        fecha_hora DATETIME NOT NULL,
+        estatus ENUM('Pendiente','Activo','Rechazado','Finalizado','Eliminado') NOT NULL,
+        FOREIGN KEY (id_usuario) REFERENCES tbl_usuarios(id_usuario)
+            ON DELETE CASCADE ON UPDATE CASCADE,
+        FOREIGN KEY (id_salon) REFERENCES tbl_salones(id_salon)
+            ON DELETE CASCADE ON UPDATE CASCADE
+    );
+
+    CREATE TABLE tbl_bitacora (
+        id_bitacora INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        titulo VARCHAR(100) NOT NULL,
+        descripcion VARCHAR(255) NOT NULL,
+        fecha_actividad DATETIME DEFAULT CURRENT_TIMESTAMP,
+        autor VARCHAR(100) DEFAULT 'Sistema'
+    );
+    ```
+
+    <Note>
+      The full script is also available at `00_BD/db_v1/00_db_gam_v1.sql` in the repository. Run it with `mysql -u root -p < 00_db_gam_v1.sql` if you prefer the CLI.
+    </Note>
+  </Step>
+
+  <Step title="Configure the database connection">
+    The backend reads its connection string from `ConexionMySQL.java`. Open the file at:
+
+    ```
+    IntegradoraWeb_core/src/org/utl/dsm/integradoraweb/db/ConexionMySQL.java
+    ```
+
+    The default values are:
+
+    ```java
+    String user     = "root";
+    String password = "Melapelas2";
+    String url      = "jdbc:mysql://localhost:3306/db_gam"
+                    + "?useSSL=false"
+                    + "&allowPublicKeyRetrieval=true"
+                    + "&serverTimezone=UTC";
+    ```
+
+    Change `user` and `password` to match your local MySQL instance, then save the file.
+
+    <Warning>
+      Do not commit production credentials to version control. Consider externalizing these values to a JNDI datasource or environment variables before going to production.
+    </Warning>
+  </Step>
+
+  <Step title="Open the projects in NetBeans">
+    The backend is split across two NetBeans projects that must both be open:
+
+    | Project | Type | Purpose |
+    |---|---|---|
+    | `IntegradoraWeb_core` | Java Class Library | Models, controllers, and DB layer |
+    | `IntegradoraII_Web` | Web Application | JAX-RS REST resources and static web files |
+
+    1. In NetBeans, choose **File → Open Project**.
+    2. Navigate to `01_Web/` and open both `IntegradoraWeb_core` and `IntegradoraII_Web`.
+    3. Right-click `IntegradoraII_Web` → **Properties → Libraries** and verify that `IntegradoraWeb_core` appears under **Project dependencies**.
+
+    <Note>
+      NetBeans will resolve the `org.utl.dsm.integradoraweb.*` packages from `IntegradoraWeb_core` automatically once the dependency is set.
+    </Note>
+  </Step>
+
+  <Step title="Deploy to GlassFish">
+    1. Make sure a GlassFish 7 server is registered in NetBeans (**Services → Servers**).
+    2. Right-click `IntegradoraII_Web` → **Clean and Build**.
+    3. Right-click `IntegradoraII_Web` → **Run** (or **Deploy**).
+
+    NetBeans deploys the WAR to GlassFish and the application becomes available at:
+
+    ```
+    http://localhost:8080/IntegradoraII_Web/
+    ```
+
+    The REST API servlet is mapped to `/api/*` (see `WEB-INF/web.xml`), so the base URL for all endpoints is:
+
+    ```
+    http://localhost:8080/IntegradoraII_Web/api/
+    ```
+
+    Verify the deployment is healthy by calling the login endpoint:
+
+    ```bash
+    curl -s -o /dev/null -w "%{http_code}" \
+      -X POST http://localhost:8080/IntegradoraII_Web/api/usuario/login \
+      -H "Content-Type: application/json" \
+      -d '{"matricula":"admin","contrasenia":"wrong"}'
+    # Expected: 401
+    ```
+
+    <Tip>
+      Check the GlassFish server log in the NetBeans **Output** panel if the deployment fails. The most common issue is a missing MySQL connector JAR — add `mysql-connector-j-*.jar` to GlassFish's `lib/` directory and restart.
+    </Tip>
+  </Step>
+
+  <Step title="Open the web panel and log in">
+    Once GlassFish is running, open your browser and go to:
+
+    ```
+    http://localhost:8080/IntegradoraII_Web/
+    ```
+
+    You will see the **Gestión UTL** login screen.
+
+    Enter the **Matrícula** and **Contraseña** for an account whose `id_estatus` is `Activo` in `tbl_usuarios`. On successful authentication the server returns a JSON object that the browser stores in `localStorage`:
+
+    | Key | Value |
+    |---|---|
+    | `id_usuario` | Primary key of the user record |
+    | `id_rol` | `Administrador`, `Coordinador`, `Docente`, or `Alumno` |
+    | `nombre_usuario` | First name + first surname |
+    | `matricula` | The matricula used to log in |
+
+    The browser then redirects to `administrador/dashboard.html`.
+
+    <Note>
+      Passwords are stored as SHA-256 hashes (`CHAR(64)`) in the `password_hash` column. When inserting a test user directly into the database, make sure you hash the password first:
+      ```sql
+      -- Example: password "admin123" hashed with SHA2
+      INSERT INTO tbl_usuarios (id_persona, matricula, password_hash, id_rol, id_turno, id_estatus)
+      VALUES (1, 'ADM001', SHA2('admin123', 256), 'Administrador', 'Matutino', 'Activo');
+      ```
+    </Note>
+  </Step>
+</Steps>
+
+---
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
-
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+<Columns cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Understand the three-layer design and package structure.
+  </Card>
+  <Card title="API reference" icon="code" href="/api/overview">
+    Explore all available REST endpoints.
+  </Card>
+  <Card title="Web panel" icon="browser" href="/web/overview">
+    Learn how to use the admin panel modules.
+  </Card>
+  <Card title="Mobile app setup" icon="mobile" href="/mobile/setup">
+    Run the Ionic app on Android or iOS.
+  </Card>
+</Columns>

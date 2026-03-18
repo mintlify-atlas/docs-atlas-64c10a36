@@ -1,0 +1,343 @@
+---
+title: 'Mobile app features'
+description: 'Detailed description of every feature module in the GAM mobile app, including routing, data models, and service API calls.'
+---
+
+The GAM mobile app organises functionality into lazy-loaded Angular modules under `src/app/Modulos/`. Each module has its own routing, page component, and (where applicable) a dedicated service that calls the REST API.
+
+## Routing
+
+The root router in `app-routing.module.ts` maps URL paths to feature modules using Angular's lazy-loading pattern with `PreloadAllModules`:
+
+```typescript src/app/app-routing.module.ts
+const routes: Routes = [
+  { path: 'home', loadChildren: () => import('./home/home.module').then(m => m.HomePageModule) },
+  { path: '', redirectTo: 'home', pathMatch: 'full' },
+  { path: 'dashboard', loadChildren: () => import('./Modulos/dashboard/dashboard.module').then(m => m.DashboardPageModule) },
+  { path: 'inventarios', loadChildren: () => import('./Modulos/inventarios/inventarios.module').then(m => m.InventariosPageModule) },
+  { path: 'inventario-reportes', loadChildren: () => import('./Modulos/inventario-reportes/inventario-reportes.module').then(m => m.InventarioReportesPageModule) },
+  { path: 'reservaciones', loadChildren: () => import('./Modulos/reservaciones/reservaciones.module').then(m => m.ReservacionesPageModule) },
+  { path: 'reportes', loadChildren: () => import('./Modulos/reportes/reportes.module').then(m => m.ReportesPageModule) },
+  { path: 'salones', loadChildren: () => import('./Modulos/salones/salones.module').then(m => m.SalonesPageModule) },
+  { path: 'prestamos', loadChildren: () => import('./Modulos/prestamos/prestamos.module').then(m => m.PrestamosPageModule) },
+];
+```
+
+Each module's internal routing resolves the empty path `''` to its single page component, making navigation simple and the bundle boundary clean.
+
+## Data models
+
+Two TypeScript interfaces define the shared data contracts used across the app.
+
+<AccordionGroup>
+  <Accordion title="Salones">
+    Defined in `src/app/Modelos/salones.model.ts`. Used by `SalonesPage` and `SalonesService`.
+
+    ```typescript src/app/Modelos/salones.model.ts
+    export interface Salones {
+      idSalon: number;
+      idEdificio: number;
+      nombre: string;
+      tipo: string;
+      capacidad: number;
+      edificio: string;
+      estatus: string;
+      ubicacionEdificio: string;
+      pisosEdificio: number;
+      divisionAcademica: string;
+      tipoMobiliario: string;
+      tipoSalon: string;
+      totalMobiliario: number;
+      disponibles: number;
+      enUso: number;
+    }
+    ```
+
+    The `detalle` endpoint returns an array of these objects for a given salon ID, each row representing one furniture type within that room.
+  </Accordion>
+
+  <Accordion title="Usuario (LoginRequest / LoginResponse)">
+    Defined in `src/app/Modelos/usuario.ts`. Used by the authentication flow.
+
+    ```typescript src/app/Modelos/usuario.ts
+    export interface LoginRequest {
+      matricula: string;
+      contrasenia: string;
+    }
+
+    export interface LoginResponse {
+      id_usuario?: number;
+      matricula?: string;
+      id_rol?: string;
+      id_turno?: string;
+      nombre?: string;
+      apellido_paterno?: string;
+      apellido_materno?: string;
+      nombreUsuario?: string;
+      contrasenia?: string;
+      error?: string;
+    }
+    ```
+
+    The `error` field on `LoginResponse` is set by the server when credentials are invalid, allowing the UI to display a specific error message without relying on HTTP status codes alone.
+  </Accordion>
+</AccordionGroup>
+
+## Data flow
+
+All modules follow the same layered pattern:
+
+```
+Ionic UI (ion-* components)
+    ↓  user interaction / ngOnInit
+Angular Page Component
+    ↓  calls service method
+Angular Service (HttpClient)
+    ↓  HTTP GET / POST / PUT  →  /api/<resource>
+Dev Proxy (proxy.conf.json)
+    ↓  forwards to
+Java REST API  (http://localhost:8080/IntegradoraII_Web)
+```
+
+## Feature modules
+
+<Tabs>
+  <Tab title="Dashboard">
+    **Route:** `/dashboard`  
+    **Files:** `Modulos/dashboard/`
+
+    The dashboard is the primary landing screen after login. `DashboardPage` calls `DashboardService.obtenerResumen()` on init to populate four metric cards and a recent-activity feed.
+
+    **Metric cards loaded from API:**
+
+    | Card | API field | Icon |
+    |---|---|---|
+    | Inventario total | `data.totalMobiliario` | `cube-outline` |
+    | Reservaciones Activas | `data.activas` | `calendar-outline` |
+    | Reportes Generados | `data.reporteSemanal` | `document-text-outline` |
+    | Usuarios | `data.totalUsuarios` | `people-outline` |
+
+    If the server is unreachable, all metric values fall back to `'-'` so the UI remains functional.
+
+    **Recent activity** is mapped from `data.actividades`. Each item's `fechaActividad` is converted to a human-readable relative time string (`calcularTiempo`):
+    - Less than 1 minute → `"Hace un momento"`
+    - Less than 1 hour → `"Hace N min"`
+    - Less than 1 day → `"Hace N hora(s)"`
+    - Otherwise → `"Hace N día(s)"`
+
+    Tapping an activity entry opens an `ion-modal` showing its title, description, date, and author.
+
+    **Quick-access links** are static and provided directly by the service:
+
+    | Label | Route | Icon |
+    |---|---|---|
+    | Inventario | `/inventarios` | `cube` |
+    | Reservaciones | `/reservaciones` | `calendar` |
+    | Reportes | `/reportes` | `document-text` |
+    | Salones | `/salones` | `business` |
+
+    **Service endpoint:**
+
+    ```typescript src/app/Modulos/dashboard/dashboard.service.ts
+    private apiUrl = './api/dashboard/resumen';
+
+    obtenerResumen(): Observable<any> {
+      return this.http.get(this.apiUrl);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Inventarios">
+    **Route:** `/inventarios`  
+    **Files:** `Modulos/inventarios/`
+
+    The inventory page shows the full list of academic resources with real-time availability data.
+
+    **Stat cards at the top of the page:**
+
+    | Card | Description |
+    |---|---|
+    | En Uso | Items currently checked out |
+    | Disponibles | Items available for use |
+    | Total | All items in the system |
+    | Stock Bajo | Items with critically low availability |
+
+    **Filter bar** allows narrowing results by material, category, and state using `ion-select` dropdowns.
+
+    **Inventory table columns:**
+
+    | Column | Description |
+    |---|---|
+    | Material | Name of the resource |
+    | Categoría | Resource category |
+    | Total | Total units |
+    | Disponibles | Available units |
+    | En uso | Units currently in use |
+    | Estado | Availability badge (e.g. `"50% disponible"`) |
+    | Acciones | Eye icon to view detail |
+
+    Status badges use `ion-badge` with `color="danger"` when availability is 0% and `color="success"` otherwise.
+
+    <Note>
+      The `InventariosPage` component currently does not inject a service — the page component is minimal and the data binding is set up in the HTML template. Backend integration follows the same `/api/inventarios` pattern used by other modules.
+    </Note>
+  </Tab>
+
+  <Tab title="Reservaciones">
+    **Route:** `/reservaciones`  
+    **Files:** `Modulos/reservaciones/`
+
+    Manages room reservations. `ReservacionesPage` tracks totals for all reservations broken down by status.
+
+    **Summary counters:**
+
+    ```typescript
+    totalReservas: number;
+    pendientes: number;   // estatus === 'PENDIENTE'
+    activas: number;      // estatus === 'ACTIVO'
+    ```
+
+    **Reservation object shape:**
+
+    ```typescript
+    {
+      id: number;
+      matricula: string;
+      edificio: string;
+      salon: string;
+      fecha: string;        // e.g. '2026-02-12 10:00:00'
+      estatus: string;      // 'PENDIENTE' | 'ACTIVO' | 'CANCELADO' | 'RECHAZADO' | 'FINALIZADO'
+    }
+    ```
+
+    **Status badge colours** (`getBadgeColor`):
+
+    | Status | Badge colour |
+    |---|---|
+    | PENDIENTE | `warning` |
+    | ACTIVO | `success` |
+    | CANCELADO | `danger` |
+    | RECHAZADO | `danger` |
+    | FINALIZADO | `tertiary` |
+
+    **Creating a reservation** — pressing the "nueva reserva" button opens an `ion-modal`. The form collects `matricula`, `edificio`, `salon`, and `fecha`. On save, the new entry is prepended to the list with status `PENDIENTE`.
+
+    **Cancelling a reservation** — triggers an `AlertController` confirmation dialog. On confirm, the reservation's status is updated to `CANCELADO` in the local array and `ChangeDetectorRef.detectChanges()` forces an immediate repaint.
+
+    **Service endpoints:**
+
+    ```typescript src/app/Modulos/reservaciones/reservaciones.service.ts
+    private API_URL = '/api/reservaciones';
+
+    getAll()              // GET  /api/reservaciones/getAll
+    crear(datos: any)     // POST /api/reservaciones/crear
+    cancelar(id: number)  // PUT  /api/reservaciones/cancelar/:id
+    ```
+  </Tab>
+
+  <Tab title="Salones">
+    **Route:** `/salones`  
+    **Files:** `Modulos/salones/`
+
+    Displays all academic classrooms with live data from the API, typed against the `Salones` model interface.
+
+    **Summary cards:**
+
+    | Card | Logic |
+    |---|---|
+    | Salones Activos | `salones.filter(s => s.estatus === 'Activo').length` |
+    | Salones Inactivos | `salones.filter(s => s.estatus === 'Inactivo').length` |
+
+    **Room list table columns:** Edificio, Nombre, Acción (eye icon)
+
+    Tapping the eye icon calls `SalonesService.getDetalle(salon.idSalon)` and opens an `ion-modal` with three sections:
+
+    - **Información General** — nombre, tipo, capacidad, estatus
+    - **Ubicación** — edificio, ubicaciónEdificio, pisosEdificio, divisiónAcadémica
+    - **Mobiliario del Salón** — a grid of every furniture type in the room with totals, disponibles, and enUso columns, plus a TOTALES row summed from all rows
+
+    **Service endpoints:**
+
+    ```typescript src/app/Modulos/salones/salones.service.ts
+    private API_URL = '/api/salones';
+
+    getAll()                   // GET /api/salones/getAll  →  Salones[]
+    getDetalle(idSalon: number) // GET /api/salones/detalle/:idSalon  →  any[]
+    ```
+  </Tab>
+
+  <Tab title="Reportes">
+    **Route:** `/reportes`  
+    **Files:** `Modulos/reportes/`
+
+    Tracks maintenance and incident reports for academic resources.
+
+    **Summary counters:**
+
+    | Property | Meaning |
+    |---|---|
+    | `pendientes` | Open reports awaiting action |
+    | `solucionados` | Resolved reports |
+    | `bajas` | Items permanently written off |
+    | `total` | All reports combined |
+
+    **Report object shape:**
+
+    ```typescript
+    {
+      codigo: string;     // e.g. 'UTL-102'
+      material: string;   // e.g. 'Silla Ergonómica'
+      salon: string;      // e.g. 'B-201'
+      prioridad: string;  // 'Baja' | 'Media' | 'Alta' | 'Critica'
+      estatus: string;    // 'Pendiente' | 'Solucionado' | 'Baja Definitiva'
+    }
+    ```
+
+    **Available actions on the page:**
+
+    - `abrirModalNuevo()` — opens a form to create a new report
+    - `aplicarFiltros()` — applies active filter selections to the list
+    - `limpiarFiltros()` — resets all filters
+    - `mostrarDetalle(reporte)` — shows full detail for a selected report
+    - `cerrarSesion()` — clears `localStorage` and redirects to `/`
+  </Tab>
+
+  <Tab title="Préstamos">
+    **Route:** `/prestamos`  
+    **Files:** `Modulos/prestamos/`
+
+    Equipment loan management module for tracking resources that have been checked out.
+
+    The `PrestamosPage` component is initialised without a service injection, indicating this module is prepared for back-end integration. The UI structure mirrors the other modules with the shared `app-sidebar` and `app-header` components.
+  </Tab>
+
+  <Tab title="Inventario Reportes">
+    **Route:** `/inventario-reportes`  
+    **Files:** `Modulos/inventario-reportes/`
+
+    A combined view bridging the inventory and reports modules. `InventarioReportesPage` provides a unified perspective on resources that have associated maintenance or incident reports.
+
+    Like `PrestamosPage`, this module is scaffolded and ready for service injection and API wiring.
+  </Tab>
+</Tabs>
+
+## Shared components
+
+Two shared components are declared at the app level and used in every module's template:
+
+| Component | Selector | Purpose |
+|---|---|---|
+| `SidebarComponent` | `<app-sidebar>` | Global side navigation menu |
+| `HeaderComponent` | `<app-header>` | Page header with title and actions |
+
+Both are imported as standalone components in `AppModule` and rendered inside each page's `ion-app` wrapper:
+
+```html
+<ion-app>
+  <app-sidebar></app-sidebar>
+  <div class="ion-page" id="main-content">
+    <app-header></app-header>
+    <ion-content><!-- page content --></ion-content>
+  </div>
+</ion-app>
+```

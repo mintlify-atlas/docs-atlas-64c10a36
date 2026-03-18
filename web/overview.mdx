@@ -1,0 +1,70 @@
+---
+title: "Web Admin Panel"
+description: "Overview of the GAM web administration panel for managing classrooms, inventory, reservations, loans, users, and reports at UTL."
+---
+
+The GAM web admin panel is a browser-based management interface for UTL staff and administrators. It is built with **Bootstrap 5**, uses the **Inter** typeface, and communicates with the Java EE REST API backend at `http://localhost:8080/IntegradoraII_Web/api`.
+
+After login, administrators are directed to the dashboard where they can navigate to any module using the persistent left sidebar.
+
+<Note>
+  All pages require an active session. Session data (`id_usuario`, `id_rol`, `nombre_usuario`, `matricula`) is stored in `localStorage`. Clicking the avatar icon in the topbar clears the session and returns the user to the login page.
+</Note>
+
+## Modules
+
+<CardGroup cols={2}>
+  <Card title="Login" icon="lock" href="/web/login">
+    Authenticate with matricula and password via the REST API.
+  </Card>
+  <Card title="Dashboard" icon="gauge" href="/web/dashboard">
+    Summary metrics and recent system activity log.
+  </Card>
+  <Card title="Salones" icon="door-open" href="/web/salones">
+    Create, edit, filter, and delete academic classrooms and labs.
+  </Card>
+  <Card title="Inventario" icon="boxes-stacked" href="/web/inventario">
+    Track all furniture and equipment assigned to buildings and classrooms.
+  </Card>
+  <Card title="Reservaciones" icon="calendar" href="/web/reservaciones">
+    Schedule and manage classroom reservations by matricula, date, and status.
+  </Card>
+  <Card title="Préstamos" icon="arrow-right-arrow-left" href="/web/prestamos">
+    Register and track equipment loans, returns, and overdue items.
+  </Card>
+  <Card title="Usuarios" icon="users" href="/web/usuarios">
+    Manage the full user directory including roles, shifts, and account status.
+  </Card>
+  <Card title="Reportes" icon="file-lines" href="/web/reportes">
+    File and track damage reports for furniture with priority and resolution status.
+  </Card>
+</CardGroup>
+
+## Browser requirements
+
+The panel relies on standard browser APIs (`fetch`, `localStorage`, CSS Grid/Flexbox). Any modern evergreen browser is supported:
+
+| Browser | Minimum version |
+|---|---|
+| Chrome / Edge | 88+ |
+| Firefox | 85+ |
+| Safari | 14+ |
+
+## Layout structure
+
+Every admin page shares the same layout shell:
+
+- **Topbar** — UTL logo, global search input, logged-in user name/role, and an avatar button that triggers `cerrarSesion()`.
+- **Sidebar** — Vertical pill navigation with links to all seven modules. The active link is highlighted automatically based on `window.location.pathname`.
+- **Page content wrapper** (`#page-content-wrapper`) — The main scrollable area. The sidebar can be toggled hidden via the hamburger button (`#menu-toggle`), which toggles the `sb-hidden` class on `<body>`.
+
+## Technology stack
+
+| Layer | Technology |
+|---|---|
+| UI framework | Bootstrap 5.3 |
+| Icons | Bootstrap Icons 1.11 + Font Awesome 6.4 |
+| Alerts | SweetAlert2 |
+| Font | Inter (Google Fonts) |
+| API communication | `fetch` (async/await) |
+| Backend | Java EE JAX-RS (Jersey) |

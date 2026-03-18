@@ -1,0 +1,239 @@
+---
+title: "Reservaciones"
+description: "Endpoints for classroom reservation management in GAM."
+---
+
+# Reservaciones
+
+Base path: `/reservacion`
+
+Manages classroom reservations. Users book a specific classroom for a date and time slot.
+
+<Note>
+  The `insertar`, `actualizar`, and `eliminar` endpoints use `application/x-www-form-urlencoded` rather than JSON. For `insertar` and `actualizar`, the reservation data is passed as a **JSON-encoded string** in a form field named `reservacion`.
+</Note>
+
+---
+
+## GET /reservacion/getAll
+
+Returns all reservations.
+
+### Response — 200 OK
+
+An array of `Reservacion` objects.
+
+<ResponseField name="idReserva" type="integer">
+  Reservation identifier.
+</ResponseField>
+
+<ResponseField name="idUsuario" type="integer">
+  ID of the user who made the reservation.
+</ResponseField>
+
+<ResponseField name="idSalon" type="integer">
+  ID of the reserved classroom.
+</ResponseField>
+
+<ResponseField name="fechaHora" type="string">
+  Date and time of the reservation, e.g. `"2025-06-15 09:00:00"`.
+</ResponseField>
+
+<ResponseField name="estatus" type="string">
+  Reservation status: `"Pendiente"`, `"Activo"`, `"Rechazado"`, or `"Completado"`.
+</ResponseField>
+
+<ResponseField name="matricula" type="string">
+  Institutional ID of the reserving user (joined from user record).
+</ResponseField>
+
+<ResponseField name="nombreSalon" type="string">
+  Name of the reserved classroom (joined).
+</ResponseField>
+
+<ResponseField name="nombreEdificio" type="string">
+  Name of the building (joined).
+</ResponseField>
+
+### Error (returned as 200 OK)
+
+```json
+{"error": "<error message>"}
+```
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/reservacion/getAll
+```
+
+---
+
+## POST /reservacion/insertar
+
+Creates a new reservation.
+
+**Content-Type:** `application/x-www-form-urlencoded`
+
+<Note>
+  The body must contain a single form field `reservacion` whose value is the **JSON-serialized** reservation object.
+</Note>
+
+### Request Parameters
+
+<ParamField body="reservacion" type="string" required>
+  A URL-encoded JSON string representing the reservation.
+
+  <Expandable title="Reservation JSON fields">
+    <ParamField body="idReserva" type="integer">
+      Pass `0` for new reservations.
+    </ParamField>
+    <ParamField body="idUsuario" type="integer" required>
+      ID of the user making the reservation.
+    </ParamField>
+    <ParamField body="idSalon" type="integer" required>
+      ID of the classroom to reserve.
+    </ParamField>
+    <ParamField body="fechaHora" type="string" required>
+      Date and time in `YYYY-MM-DD HH:MM:SS` format.
+    </ParamField>
+    <ParamField body="estatus" type="string" required>
+      Initial status, e.g. `"Pendiente"`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"result": "OK"}
+```
+
+### Error (returned as 200 OK)
+
+```json
+{"error": "<error message>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/reservacion/insertar \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode 'reservacion={"idReserva":0,"idUsuario":1,"idSalon":3,"fechaHora":"2025-06-20 10:00:00","estatus":"Pendiente"}'
+```
+
+---
+
+## POST /reservacion/actualizar
+
+Updates an existing reservation. The `idReserva` field in the JSON identifies the record.
+
+**Content-Type:** `application/x-www-form-urlencoded`
+
+<Note>
+  Same encoding pattern as `/reservacion/insertar` — the reservation JSON is sent as a form field named `reservacion`.
+</Note>
+
+### Request Parameters
+
+<ParamField body="reservacion" type="string" required>
+  URL-encoded JSON string with the updated reservation fields.
+
+  <Expandable title="Reservation JSON fields">
+    <ParamField body="idReserva" type="integer" required>
+      ID of the reservation to update.
+    </ParamField>
+    <ParamField body="idUsuario" type="integer">
+      Updated user ID.
+    </ParamField>
+    <ParamField body="idSalon" type="integer">
+      Updated classroom ID.
+    </ParamField>
+    <ParamField body="fechaHora" type="string">
+      Updated date and time.
+    </ParamField>
+    <ParamField body="estatus" type="string">
+      Updated status.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"result": "OK"}
+```
+
+### Error (returned as 200 OK)
+
+```json
+{"error": "No se encontró el ID <idReserva>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/reservacion/actualizar \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode 'reservacion={"idReserva":5,"idUsuario":1,"idSalon":3,"fechaHora":"2025-06-20 11:00:00","estatus":"Activo"}'
+```
+
+---
+
+## POST /reservacion/eliminar
+
+Deletes a reservation by its ID.
+
+**Content-Type:** `application/x-www-form-urlencoded`
+
+### Request Parameters
+
+<ParamField body="idReserva" type="integer" required>
+  ID of the reservation to delete.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"result": "OK"}
+```
+
+### Error (returned as 200 OK)
+
+```json
+{"error": "<error message>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/reservacion/eliminar \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d 'idReserva=5'
+```
+
+---
+
+## GET /reservacion/getSalones
+
+Returns all classrooms available for selection in the reservation form. Returns the same `Salones` structure as `/salones/getAll`.
+
+### Response — 200 OK
+
+An array of `Salones` objects with at minimum `idSalon`, `nombre`, and `edificio` populated.
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "<error message>"}
+```
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/reservacion/getSalones
+```

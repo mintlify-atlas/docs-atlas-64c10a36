@@ -1,0 +1,117 @@
+---
+title: "Inventario"
+description: "Track all furniture and equipment items registered in GAM, organized by building and classroom."
+---
+
+The Inventario module (`administrador/inventario.html`) manages individual inventory records for furniture and equipment at UTL. Each record links a physical item to a specific **building → classroom** location.
+
+## Summary cards
+
+Four counters are computed client-side from the full data set returned by `GET /api/inventario/getAll`:
+
+| Card | DOM ID | Calculation |
+|---|---|---|
+| En Uso | `#cardEnUso` | `total − disponibles` across all items |
+| Disponibles | `#cardDisponibles` | Sum of all `disponibles` values |
+| Total Recursos | `#cardTotal` | Sum of all `total` values |
+| Stock Bajo | `#cardStockBajo` | Count of item types where `(disponibles / total) × 100 < 30` |
+
+## Table columns
+
+The main table (`#tablaInventario`) is populated by grouping items by material type:
+
+| Column | Source field | Notes |
+|---|---|---|
+| Material | `item.material` | Furniture/equipment type |
+| Categoría | `item.categoria` | Category |
+| Total | `item.total` | Total units of this type |
+| Disponibles | `item.disponibles` | Units not currently in use |
+| En uso | `total - disponibles` | Computed client-side |
+| Estado | Percentage badge | Red < 15%, yellow 15–49%, green ≥ 50% available |
+| Acciones | Eye button | Opens the detail modal |
+
+## Filters
+
+Filters are populated dynamically from the table data after it loads:
+
+| Filter | Field |
+|---|---|
+| Material | Item type name |
+| Categoría | Item category |
+| Estado | Availability range (0–30%, 30–60%, 60–100%) |
+
+## Building → Classroom relationship
+
+When registering a new item, the **Edificio** select is loaded from `GET /api/inventario/getEdificios`. Selecting a building then triggers `GET /api/inventario/getSalones?idEdificio={id}` to populate the **Salón** select with only the classrooms that belong to that building.
+
+<Info>
+  The salon select is reset to *"Seleccione un edificio"* if no building is selected, preventing orphaned inventory records.
+</Info>
+
+## Registering a new inventory item
+
+<Steps>
+  <Step title="Open the New Material modal">
+    Click the **Nuevo Material** button. The `#modalInventario` dialog opens (static backdrop — it will not close on outside click).
+  </Step>
+  <Step title="Select building">
+    Choose a building from the **Edificio** dropdown. The list is fetched from `GET /api/inventario/getEdificios`.
+  </Step>
+  <Step title="Select classroom">
+    After choosing a building, the **Salón** dropdown is populated via `GET /api/inventario/getSalones?idEdificio={id}`. Select the target classroom.
+  </Step>
+  <Step title="Fill in item details">
+    Complete the form fields:
+
+    | Field | ID | Type | Options |
+    |---|---|---|---|
+    | ID Mobiliario | `txtIdMobi` | text | Required — unique identifier |
+    | Ubicación | `selUbicacion` | select | Edificio, Administración |
+    | Tipo | `selTipo` | select | Silla, Mesa, Proyector, Cañon |
+    | Categoría | `selCategoria` | select | Papelería, Tecnología, Cables, Eléctrico |
+    | Observaciones | `txtObs` | textarea | Optional notes |
+  </Step>
+  <Step title="Save">
+    Click **Guardar**. The client calls `POST /api/inventario/save` with a JSON body. New items are given `estatus = "Activo"` and `id_estatus_actual = "Disponible"` automatically.
+  </Step>
+</Steps>
+
+## Viewing item details
+
+Clicking the eye button in the table opens `#modalDetalleInventario` and fetches `GET /api/inventario/getByName?nombre={material}`. The modal shows each individual unit of that material type, listing:
+
+- `nombre` — individual item name/code
+- `nombreEdificio` — building
+- `nombreSalon` — classroom
+- `ubicacion` — shelf/location within the classroom
+- `estatus` — `Disponible` (green) or `En Uso` (yellow)
+
+From this view each unit can be **edited** or **deleted** individually.
+
+## Editing an item
+
+Clicking the pencil icon inside the detail modal opens `#modalEditarItem`. Editable fields:
+
+| Field | ID | Notes |
+|---|---|---|
+| Salon | `txtSalon` | Read-only display |
+| Ubicación / Estante | `txtEditUbicacion` | Free text |
+| Estatus | `selEditEstatus` | Disponible, En Uso |
+
+Saving calls `POST /api/inventario/update` with `{ id_inventario, id_estatus_actual }`.
+
+## Deleting an item
+
+The trash button inside the detail modal triggers a SweetAlert2 confirmation and then calls `POST /api/inventario/delete` with `{ "id_inventario": <id> }`.
+
+## API endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/inventario/getAll` | List all inventory groups |
+| `GET` | `/api/inventario/getByName?nombre=` | Get individual units by material name |
+| `GET` | `/api/inventario/getEdificios` | List all buildings |
+| `GET` | `/api/inventario/getSalones?idEdificio=` | List classrooms for a building |
+| `POST` | `/api/inventario/save` | Register a new item |
+| `POST` | `/api/inventario/update` | Update item status |
+| `POST` | `/api/inventario/delete` | Delete an item by `id_inventario` |

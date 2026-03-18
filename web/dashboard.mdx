@@ -1,0 +1,110 @@
+---
+title: "Dashboard"
+description: "The GAM main dashboard displaying system-wide metrics and a recent activity log."
+---
+
+The dashboard (`administrador/dashboard.html`) is the first page administrators see after login. It shows four summary metric cards, a set of quick-access links, and a scrollable activity feed pulled from the API.
+
+## Summary metric cards
+
+Four cards are populated on page load by `Dashboard.js` via a single request to `GET /api/dashboard/resumen`:
+
+| Card | DOM element | API field | Color |
+|---|---|---|---|
+| Inventario total | `#total-inventario` | `totalMobiliario` | Green |
+| Reservaciones Activas | `#reservaciones-activas` | `activas` | Purple |
+| Reportes Generados | `#total-reportes` | `reporteSemanal` | Orange |
+| Usuarios | `#total-usuarios` | `totalUsuarios` | Blue |
+
+If the request fails, `total-inventario` and `total-usuarios` are set to `"-"` and the error is logged to the console.
+
+## Quick-access links
+
+Below the metric cards there is a 2-column grid of clickable cards that navigate directly to the four most-used modules:
+
+| Icon color | Label | Target |
+|---|---|---|
+| Green | Inventario | `inventario.html` |
+| Purple | Reservaciones | `reservaciones.html` |
+| Orange | Reportes | `reportes.html` |
+| Pink | Salones | `salones.html` |
+
+## Recent activity log
+
+A live activity feed (`#contenedor-actividades`) is rendered below the quick-access grid. Each entry shows:
+
+- **Title** — the type of movement (`act.titulo`)
+- **Description** — a short detail string (`act.descripcion`)
+- **Relative timestamp** — calculated client-side from `act.fechaActividad`
+
+The relative timestamp logic converts a SQL datetime to a human-readable string:
+
+```javascript
+function calcularTiempo(fechaSQL) {
+  const fechaEvento = new Date(fechaSQL.replace(" ", "T"));
+  const ahora = new Date();
+  const diferenciaSegundos = Math.floor((ahora - fechaEvento) / 1000);
+  const minutos = Math.floor(diferenciaSegundos / 60);
+  const horas = Math.floor(minutos / 60);
+  const dias = Math.floor(horas / 24);
+
+  if (minutos < 1) return "Hace un momento";
+  if (minutos < 60) return `Hace ${minutos} min`;
+  if (horas < 24) return `Hace ${horas} hora${horas > 1 ? "s" : ""}`;
+  return `Hace ${dias} día${dias > 1 ? "s" : ""}`;
+}
+```
+
+Clicking any activity row opens a Bootstrap modal (`#modalDetalleActividad`) that shows the full detail:
+
+| Field | Label |
+|---|---|
+| `autor` | Usuario Responsable |
+| `titulo` | Tipo de Movimiento |
+| `descripcion` | Detalle del Registro |
+| `fechaActividad` | Fecha y Hora Exacta |
+
+If `autor` is `null` or missing, the modal displays `"Sistema"` instead.
+
+## Navigation sidebar
+
+The sidebar is shared across all admin pages. Links and their targets:
+
+| Icon | Label | Target |
+|---|---|---|
+| `bi-grid-fill` | Dashboard | `dashboard.html` |
+| `bi-box-seam-fill` | Inventario | `inventario.html` |
+| `bi-collection-fill` | Prestamos | `prestamos.html` |
+| `bi-calendar-event-fill` | Reservaciones | `reservaciones.html` |
+| `bi-file-earmark-text-fill` | Reportes | `reportes.html` |
+| `bi-door-open-fill` | Salones | `salones.html` |
+| `bi-people-fill` | Usuarios | `usuarios.html` |
+
+The sidebar can be collapsed by clicking the `#menu-toggle` button in the topbar, which toggles the `sb-hidden` class on `<body>`.
+
+## Topbar
+
+The topbar shows:
+- UTL logo and "Sistema de Gestión" label
+- Global search input (UI only, no backend binding)
+- Logged-in user **name** (`#userNameDisplay`) and **role** (`#userRoleDisplay`), read from `localStorage`
+- Avatar button that calls `cerrarSesion()` — clears `localStorage` and redirects to `../index.html`
+
+## Data loading
+
+```javascript
+function cargarDashboard() {
+  const url = 'http://localhost:8080/IntegradoraII_Web/api/dashboard/resumen';
+
+  fetch(url)
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('total-inventario').innerText = data.totalMobiliario;
+      document.getElementById('total-usuarios').innerText   = data.totalUsuarios;
+      document.getElementById('total-reportes').innerText   = data.reporteSemanal;
+      document.getElementById('reservaciones-activas').innerText = data.activas;
+
+      // Render activity rows ...
+    });
+}
+```

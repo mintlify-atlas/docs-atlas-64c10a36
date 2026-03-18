@@ -1,0 +1,181 @@
+---
+title: 'Mobile app setup'
+description: 'How to install dependencies, configure the API proxy, and run or build the GAM mobile app.'
+---
+
+## Prerequisites
+
+Before starting, make sure the following tools are installed:
+
+| Tool | Purpose |
+|---|---|
+| Node.js 18+ | JavaScript runtime |
+| Angular CLI 20 | `ng` commands |
+| Ionic CLI | `ionic serve`, `ionic build`, Capacitor helpers |
+| Android Studio | Android emulator and SDK |
+| Xcode (macOS only) | iOS simulator and signing |
+
+<Steps>
+  <Step title="Install global CLI tools">
+    Install the Angular CLI and Ionic CLI globally:
+
+    ```bash
+    npm install -g @angular/cli@20
+    npm install -g @ionic/cli
+    ```
+  </Step>
+
+  <Step title="Clone the repository and enter the project directory">
+    Navigate into the mobile app source folder:
+
+    ```bash
+    cd 02_Movil/00_Ionic/Integradora_II
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all npm packages listed in `package.json`:
+
+    ```bash
+    npm install
+    ```
+
+    This installs Ionic 8, Angular 20, Capacitor 8, RxJS, Ionicons, and all dev tooling.
+  </Step>
+
+  <Step title="Configure the API base URL">
+    The development proxy is already configured in `proxy.conf.json`. Verify the `target` matches your running Java back-end instance:
+
+    ```json proxy.conf.json
+    {
+      "/api": {
+        "target": "http://localhost:8080/IntegradoraII_Web",
+        "secure": false,
+        "changeOrigin": true,
+        "logLevel": "debug"
+      }
+    }
+    ```
+
+    Change `target` if your back end runs on a different host or port. The Angular dev server automatically reads this file when started with `npm start`.
+
+    The environment file confirms the proxy path used by all services:
+
+    ```typescript src/environments/environment.ts
+    export const environment = {
+      production: false,
+      apiUrl: '/api'  // Uses the proxy
+    };
+    ```
+
+    <Note>
+      `environment.prod.ts` does not define `apiUrl`. For a production build targeting a remote server, add `apiUrl` with the full base URL to `environment.prod.ts` and update each service to reference `environment.apiUrl`.
+    </Note>
+  </Step>
+
+  <Step title="Run in the browser">
+    Start the Angular dev server with the proxy enabled:
+
+    ```bash
+    npm start
+    ```
+
+    This runs `ng serve`. The app is available at `http://localhost:4200`. All requests to `/api/*` are forwarded to the Java back end.
+
+    Alternatively, use the Ionic CLI for a richer dev experience with live reload:
+
+    ```bash
+    ionic serve
+    ```
+  </Step>
+
+  <Step title="Build the web assets">
+    Compile and bundle the app into the `www/` output directory:
+
+    ```bash
+    npm run build
+    ```
+
+    For a production-optimised build:
+
+    ```bash
+    ng build --configuration production
+    ```
+  </Step>
+
+  <Step title="Sync to native platforms with Capacitor">
+    After building, copy the `www/` output to the native Android/iOS projects:
+
+    ```bash
+    npx cap sync
+    ```
+
+    <Info>
+      `cap sync` runs both `cap copy` (copies web assets) and `cap update` (updates native plugins). Run it after every production build before opening the native IDE.
+    </Info>
+  </Step>
+
+  <Step title="Build and run on Android">
+    Open the Android project in Android Studio:
+
+    ```bash
+    npx cap open android
+    ```
+
+    Then use Android Studio to select an emulator or connected device and press **Run**.
+
+    To build directly from the terminal:
+
+    ```bash
+    npx cap run android
+    ```
+  </Step>
+
+  <Step title="Build and run on iOS (macOS only)">
+    Open the Xcode project:
+
+    ```bash
+    npx cap open ios
+    ```
+
+    Select your target device or simulator in Xcode, then press **Run**.
+
+    To build directly from the terminal:
+
+    ```bash
+    npx cap run ios
+    ```
+
+    <Warning>
+      iOS builds require a valid Apple Developer account and code-signing certificate configured in Xcode. Simulator builds do not require a paid account.
+    </Warning>
+  </Step>
+</Steps>
+
+## Available npm scripts
+
+| Script | Command | Description |
+|---|---|---|
+| `start` | `ng serve` | Dev server with proxy at localhost:4200 |
+| `build` | `ng build` | Production build to `www/` |
+| `watch` | `ng build --watch --configuration development` | Incremental dev build |
+| `test` | `ng test` | Unit tests with Karma/Jasmine |
+| `lint` | `ng lint` | ESLint checks |
+
+## Capacitor configuration
+
+The Capacitor configuration lives in `capacitor.config.ts`:
+
+```typescript capacitor.config.ts
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'io.ionic.starter',
+  appName: 'Integradora_II',
+  webDir: 'www'
+};
+
+export default config;
+```
+
+Update `appId` and `appName` before publishing to the App Store or Google Play.

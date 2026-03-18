@@ -1,0 +1,133 @@
+---
+title: "Reportes"
+description: "File and manage damage reports for furniture and equipment tracked in GAM."
+---
+
+The Reportes module (`administrador/reportes.html`) is the damage-tracking system for GAM. Administrators create reports linking a specific inventory item to a type of damage, set a priority level, and track the repair or disposal workflow through to resolution.
+
+## Summary cards
+
+Four counters are recomputed from the full report list on every load or filter operation:
+
+| Card | DOM ID | Condition |
+|---|---|---|
+| Pendientes | `#txtPendientes` | `estatus = 'Pendiente'` |
+| Solucionados | `#txtSolucionados` | `estatus = 'Solucionado'` |
+| Bajas Definitivas | `#txtBajas` | `estatus = 'Baja Definitiva'` |
+| Total Reportes | `#txtTotal` | All records |
+
+## Table columns
+
+The main table body (`#tbodyReportes`) is rendered by `reportes.js`:
+
+| Column | Source field | Notes |
+|---|---|---|
+| Código | `r.codigo_mueble` | Furniture item code |
+| Material | `r.tipo_material` | Type of material |
+| Salón | `r.nombre_salon` | Classroom where the damage was found |
+| Prioridad | `r.prioridad` | Colored badge |
+| Estatus | `r.estatus` | Colored badge |
+| Acciones | — | Edit, Delete (admin only), View |
+
+<Note>
+  Edit and delete buttons are restricted to users with `id_rol = 'administrador'` (checked case-insensitively at render time).
+</Note>
+
+## Priority levels
+
+| Priority | Badge color |
+|---|---|
+| Baja | Cyan (`bg-info`) |
+| Media | Cyan (`bg-info`) |
+| Alta | Yellow (`bg-warning text-dark`) |
+| Critica | Red (`bg-danger`) |
+
+## Status values
+
+| Status | Badge color | Meaning |
+|---|---|---|
+| Pendiente | Yellow (`bg-warning text-dark`) | Reported, awaiting action |
+| Solucionado | Green (`bg-success`) | Repaired and resolved |
+| Baja Definitiva | Red (`bg-danger`) | Item condemned / written off |
+
+## Filters
+
+Three dropdowns filter the table client-side (no additional API call):
+
+| Filter | Options |
+|---|---|
+| Prioridad | Baja, Media, Alta, Crítica |
+| Tipo Daño | Daño por uso (Desgaste), Rotura / Fractura, Vandalismo (Rayones/Grafiti) |
+| Estatus | Pendiente, Solucionado, Baja Definitiva |
+
+A **reset button** (↺) next to the Filtrar button clears all three filters and restores the full table.
+
+## Creating a damage report
+
+<Steps>
+  <Step title="Open the New Report modal">
+    Click **Nuevo Reporte**. The form is cleared via `limpiarForm()` and the `#reporteModal` dialog opens.
+  </Step>
+  <Step title="Select the damaged item">
+    The **Material** dropdown is populated from `GET /api/reporte/getMateriales`, which returns all inventory items with their furniture code and type. Each option shows `{codigo_mueble} - {tipo_material}`.
+  </Step>
+  <Step title="Specify the damage type">
+    Choose from:
+    - Daño por uso (Desgaste)
+    - Rotura / Fractura
+    - Vandalismo (Rayones/Grafiti)
+  </Step>
+  <Step title="Write a description">
+    Enter a free-text description of the damage in the **Descripción** textarea (required).
+  </Step>
+  <Step title="Set priority and status">
+    Choose a **Prioridad** (Baja, Media, Alta, Crítica) and initial **Estatus** (typically `Pendiente` for new reports).
+  </Step>
+  <Step title="Submit">
+    Click **Guardar**. The form submits via `POST /api/reporte/insertar` using URL-encoded form data with three parameters:
+
+    ```http
+    POST /IntegradoraII_Web/api/reporte/insertar
+    Content-Type: application/x-www-form-urlencoded
+
+    datos={"tipo_dano":"Rotura / Fractura","descripcion":"...","prioridad":"Alta","estatus":"Pendiente"}
+    &idUsuario=1
+    &idInventario=12
+    ```
+
+    On success, a SweetAlert shows *"Reporte guardado"* and the table reloads.
+  </Step>
+</Steps>
+
+## Editing a report
+
+Administrators can click the pencil icon to reopen the `#reporteModal` pre-filled with:
+- `tipo_dano`
+- `descripcion`
+- `prioridad`
+- `estatus`
+
+This uses the same form and submit handler as creation; the `idInventario` select value from the pre-fill determines which inventory item is targeted.
+
+## Deleting a report
+
+Clicking the trash icon triggers a SweetAlert confirmation: *"¿Eliminar? Se marcará como Baja Definitiva"*. Confirming calls `POST /api/reporte/eliminar` with `idReporte` as a form parameter. The API sets the report's status to `Baja Definitiva` (soft delete).
+
+## Viewing report details
+
+The eye button opens `#modalDetalles` — a compact modal populated from the in-memory `listaGlobalReportes` array:
+
+| Field | Source | Label |
+|---|---|---|
+| Descripción | `r.descripcion` | COMENTARIO |
+| Fecha | `r.fecha_reporte` | FECHA |
+| Responsable | `r.matricula` | POR |
+
+## API endpoints
+
+| Method | Path | Content-Type | Description |
+|---|---|---|---|
+| `GET` | `/api/reporte/getAll` | — | List all reports |
+| `GET` | `/api/reporte/getMateriales` | — | List inventory items for the material selector |
+| `POST` | `/api/reporte/insertar` | `application/x-www-form-urlencoded` | Create a report |
+| `POST` | `/api/reporte/eliminar` | `application/x-www-form-urlencoded` | Mark report as Baja Definitiva by `idReporte` |

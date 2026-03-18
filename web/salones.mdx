@@ -1,0 +1,123 @@
+---
+title: "Salones"
+description: "Manage academic classrooms, laboratories, and meeting rooms registered in GAM."
+---
+
+The Salones module (`administrador/salones.html`) provides a full CRUD interface for academic spaces at UTL. Spaces are categorized as **Salón**, **Laboratorio**, or **Sala** and are assigned to one of the three registered buildings.
+
+## Summary cards
+
+Four summary cards are updated automatically whenever data is (re-)loaded:
+
+| Card | Description |
+|---|---|
+| Salones Activos | Spaces with `estatus = Activo` |
+| Salones Inactivos | Spaces with `estatus = Inactivo` |
+| Salones Eliminados | Spaces with `estatus = Eliminado` |
+| Total Salones | All spaces regardless of status |
+
+## Table columns
+
+| Column | Source field | Notes |
+|---|---|---|
+| Nombre | `salon.nombre` | Displayed as bold text |
+| Tipo | `salon.tipo` | `Salon` is rendered as `Salón` in the UI |
+| Capacidad | `salon.capacidad` | Number of persons |
+| Edificio | `salon.edificio` | Building name string |
+| Estatus | `salon.estatus` | Color-coded badge: green / grey / red |
+| Acciones | — | Edit, Delete, and Details buttons |
+
+## Filters
+
+Three dropdowns allow filtering the table without a new API call (client-side):
+
+| Filter | Options |
+|---|---|
+| Edificio | Edificio D, Edificio E, Edificio F |
+| Tipo | Salón, Laboratorio, Sala |
+| Estatus | Activo, Inactivo, Eliminado |
+
+## Create / edit form fields
+
+Both the **Agregar** and **Editar** actions use the same Bootstrap modal (`#modalSalon`). All fields are required:
+
+| Field | ID | Type | Options / Notes |
+|---|---|---|---|
+| Edificio | `salonIdEdificio` | `<select>` | 1 = Edificio D, 2 = Edificio E, 3 = Edificio F |
+| Tipo | `salonTipo` | `<select>` | Salon, Laboratorio, Sala |
+| Nombre del Salón | `salonNombre` | text | Free text |
+| Capacidad (personas) | `salonCapacidad` | number | Minimum 1 |
+| Estatus | `salonEstatus` | `<select>` | Activo (default), Inactivo, Eliminado |
+
+## Creating a new salon
+
+<Steps>
+  <Step title="Open the Add modal">
+    Click the **Agregar Salón** button in the page header. The `#modalSalon` dialog opens with all fields cleared and `Estatus` defaulted to `Activo`.
+  </Step>
+  <Step title="Select a building">
+    Choose the building from the **Edificio** dropdown (Edificio D, E, or F).
+  </Step>
+  <Step title="Select the space type">
+    Choose **Salón**, **Laboratorio**, or **Sala** from the **Tipo** dropdown.
+  </Step>
+  <Step title="Fill in name and capacity">
+    Enter the room name (e.g., `D-101`) and its person capacity (e.g., `30`).
+  </Step>
+  <Step title="Save">
+    Click **Guardar Salón**. The client calls `POST /api/salones/insertar` with the form data as JSON. On success (`"Salón agregado correctamente"`), a SweetAlert2 success toast appears and the table refreshes.
+  </Step>
+</Steps>
+
+## Editing a salon
+
+Click the pencil icon in the **Acciones** column. The modal title changes to **Editar Salón** and all fields are pre-populated from the in-memory `todosLosSalones` array. Saving calls `POST /api/salones/actualizar`.
+
+## Deleting a salon
+
+Click the trash icon. A SweetAlert2 confirmation dialog asks *"¿Está seguro? Esta acción no se puede deshacer"*. Confirming sends `POST /api/salones/eliminar` with `{ "idSalon": <id> }`.
+
+<Warning>
+  Deletion is permanent. The API response message `"Salón eliminado correctamente"` confirms the operation; any other message is shown as an error.
+</Warning>
+
+## Viewing details
+
+Click the eye icon to open the `#modalDetalleSalon` (large modal). It fetches `GET /api/salones/detalle/{id}` and displays:
+
+<Tabs>
+  <Tab title="Información General">
+    - Nombre
+    - Tipo
+    - Capacidad (personas)
+    - Estatus (badge)
+  </Tab>
+  <Tab title="Ubicación">
+    - Edificio
+    - Ubicación del edificio
+    - Número de pisos
+    - División académica
+  </Tab>
+  <Tab title="Mobiliario del Salón">
+    A summary table showing each furniture type assigned to the classroom:
+
+    | Column | Description |
+    |---|---|
+    | Tipo | Type of furniture |
+    | Total | Total units |
+    | Disponibles | Available units (green badge) |
+    | En Uso | In-use units (yellow badge) |
+
+    A totals footer row sums all columns.
+  </Tab>
+</Tabs>
+
+## API endpoints
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/salones/getAll` | List all salons |
+| `POST` | `/api/salones/insertar` | Insert a new salon |
+| `POST` | `/api/salones/actualizar` | Update an existing salon |
+| `POST` | `/api/salones/eliminar` | Delete a salon by `idSalon` |
+| `GET` | `/api/salones/detalle/{id}` | Get salon detail with furniture summary |

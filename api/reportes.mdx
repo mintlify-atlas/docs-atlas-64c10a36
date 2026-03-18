@@ -1,0 +1,204 @@
+---
+title: "Reportes"
+description: "Endpoints for damage and incident reporting in GAM."
+---
+
+# Reportes
+
+Base path: `/reporte`
+
+Manages damage and incident reports for furniture items. A report ties a furniture item (`codigo_mueble`) to a damage description, priority, and lifecycle status.
+
+<Note>
+  The `insertar` and `eliminar` endpoints use `application/x-www-form-urlencoded`. For `insertar`, the report data is passed as a **JSON-encoded string** in a form field named `datos`, alongside separate `idUsuario` and `idInventario` fields.
+</Note>
+
+---
+
+## GET /reporte/getAll
+
+Returns all damage reports.
+
+### Response — 200 OK
+
+An array of `Reporte` objects.
+
+<ResponseField name="id_reporte" type="integer">
+  Report identifier.
+</ResponseField>
+
+<ResponseField name="matricula" type="string">
+  Institutional ID of the user who filed the report.
+</ResponseField>
+
+<ResponseField name="codigo_mueble" type="string">
+  Furniture code of the damaged item.
+</ResponseField>
+
+<ResponseField name="tipo_material" type="string">
+  Type of material, e.g. `"Silla"`, `"Proyector"`.
+</ResponseField>
+
+<ResponseField name="nombre_salon" type="string">
+  Classroom where the damage was found.
+</ResponseField>
+
+<ResponseField name="tipo_dano" type="string">
+  Category of damage, e.g. `"Físico"`, `"Eléctrico"`.
+</ResponseField>
+
+<ResponseField name="descripcion" type="string">
+  Detailed description of the damage.
+</ResponseField>
+
+<ResponseField name="prioridad" type="string">
+  Priority level: `"Baja"`, `"Alta"`, or `"Critica"`.
+</ResponseField>
+
+<ResponseField name="fecha_reporte" type="string">
+  Date the report was filed, e.g. `"2025-06-10"`.
+</ResponseField>
+
+<ResponseField name="estatus" type="string">
+  Report status: `"Pendiente"`, `"Solucionado"`, or `"Baja Definitiva"`.
+</ResponseField>
+
+### Response — 500 Internal Server Error
+
+Plain text error message.
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/reporte/getAll
+```
+
+---
+
+## GET /reporte/getMateriales
+
+Returns the catalog of material records used to populate the material selector in the report creation form. Each entry represents a distinct inventory item with its furniture code and type.
+
+### Response — 200 OK
+
+An array of `Reporte`-shaped objects. The relevant fields for the selector are:
+
+<ResponseField name="id_reporte" type="integer">
+  Used as the option value in the front-end selector.
+</ResponseField>
+
+<ResponseField name="codigo_mueble" type="string">
+  Furniture code displayed in the selector.
+</ResponseField>
+
+<ResponseField name="tipo_material" type="string">
+  Material type displayed alongside the code.
+</ResponseField>
+
+### Response — 500 Internal Server Error
+
+Plain text error message.
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/reporte/getMateriales
+```
+
+---
+
+## POST /reporte/insertar
+
+Creates a new damage report.
+
+**Content-Type:** `application/x-www-form-urlencoded`
+
+<Note>
+  The report data is split across three form fields: a JSON string in `datos`, plus plain integers `idUsuario` and `idInventario`.
+</Note>
+
+### Request Parameters
+
+<ParamField body="datos" type="string" required>
+  URL-encoded JSON string with the report content.
+
+  <Expandable title="Report JSON fields">
+    <ParamField body="tipo_dano" type="string" required>
+      Category of damage, e.g. `"Físico"`.
+    </ParamField>
+    <ParamField body="descripcion" type="string" required>
+      Detailed description.
+    </ParamField>
+    <ParamField body="prioridad" type="string" required>
+      Priority: `"Baja"`, `"Alta"`, or `"Critica"`.
+    </ParamField>
+    <ParamField body="estatus" type="string" required>
+      Initial status, e.g. `"Pendiente"`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="idUsuario" type="integer" required>
+  ID of the user filing the report.
+</ParamField>
+
+<ParamField body="idInventario" type="integer" required>
+  ID of the inventory item being reported.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"res": "Éxito"}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "<error message>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/reporte/insertar \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode 'datos={"tipo_dano":"Físico","descripcion":"Pata rota","prioridad":"Alta","estatus":"Pendiente"}' \
+  -d 'idUsuario=1&idInventario=42'
+```
+
+---
+
+## POST /reporte/eliminar
+
+Closes a report by updating its status to `"Baja Definitiva"`. The record is not physically deleted.
+
+**Content-Type:** `application/x-www-form-urlencoded`
+
+### Request Parameters
+
+<ParamField body="idReporte" type="integer" required>
+  ID of the report to close.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"res": "Reporte eliminado correctamente"}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "<error message>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/reporte/eliminar \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d 'idReporte=8'
+```

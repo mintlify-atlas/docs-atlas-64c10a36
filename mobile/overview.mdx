@@ -1,0 +1,97 @@
+---
+title: 'Mobile app overview'
+description: 'Overview of the GAM Ionic/Angular mobile application for academic resource management at UTL.'
+---
+
+The GAM mobile app is built with **Ionic 8** and **Angular 20**, deployable to iOS and Android via **Capacitor 8**. It gives staff and administrators a cross-platform interface to manage furniture inventory, room reservations, loans, classroom data, and maintenance reports — all connected to the same Java back end as the web application.
+
+## Technology stack
+
+| Layer | Technology | Version |
+|---|---|---|
+| UI framework | Ionic Angular | ^8.0.0 |
+| Application framework | Angular | ^20.0.0 |
+| Native runtime | Capacitor | 8.1.0 |
+| HTTP client | Angular HttpClient | — |
+| Icons | Ionicons | ^7.0.0 |
+| Reactive streams | RxJS | ~7.8.0 |
+| Language | TypeScript | ~5.9.0 |
+
+<Note>
+  The app uses Angular's lazy-loaded module strategy (`PreloadAllModules`) so every feature module is bundled separately and preloaded in the background after the initial render.
+</Note>
+
+## Platform support
+
+Capacitor wraps the compiled Angular/Ionic web app into a native shell. The same codebase targets:
+
+- **Android** — via Android Studio and the Capacitor Android plugin
+- **iOS** — via Xcode and the Capacitor iOS plugin
+- **Browser** — full Progressive Web App support for development and desktop use
+
+The Capacitor app ID is `io.ionic.starter` and the web output directory is `www`.
+
+## Feature modules
+
+<CardGroup cols={2}>
+  <Card title="Dashboard" icon="chart-bar" href="/mobile/features">
+    At-a-glance metrics: total inventory, active reservations, weekly reports, and user count. Displays a recent-activity feed with relative timestamps.
+  </Card>
+  <Card title="Inventarios" icon="cube" href="/mobile/features">
+    Full inventory table showing materials by category, with status badges indicating availability percentage. Supports filters by material, category, and state.
+  </Card>
+  <Card title="Reservaciones" icon="calendar" href="/mobile/features">
+    Create, view, and cancel room reservations. Status badges reflect PENDIENTE, ACTIVO, CANCELADO, RECHAZADO, and FINALIZADO states.
+  </Card>
+  <Card title="Salones" icon="building" href="/mobile/features">
+    List of academic classrooms loaded live from the API. Tap any room to open a modal with full details: capacity, location, division, and per-type furniture inventory.
+  </Card>
+  <Card title="Préstamos" icon="arrow-right-left" href="/mobile/features">
+    Equipment loan management for tracking which resources are currently checked out.
+  </Card>
+  <Card title="Reportes" icon="file-text" href="/mobile/features">
+    Maintenance and incident reports with priority levels (Baja, Media, Alta, Crítica) and lifecycle statuses (Pendiente, Solucionado, Baja Definitiva).
+  </Card>
+  <Card title="Inventario Reportes" icon="clipboard-list" href="/mobile/features">
+    Combined inventory-report view that bridges the inventory and reporting modules.
+  </Card>
+</CardGroup>
+
+## Application structure
+
+The entry point redirects immediately to the `home` route. All feature modules are lazy-loaded from `src/app/Modulos/`:
+
+```
+src/app/
+├── app.module.ts            # Root module — IonicModule, HttpClientModule
+├── app-routing.module.ts    # Top-level lazy routes
+├── components/
+│   ├── sidebar/             # Global navigation sidebar
+│   └── header/              # Shared page header
+├── Modelos/
+│   ├── salones.model.ts     # Salones interface
+│   └── usuario.ts           # LoginRequest / LoginResponse interfaces
+└── Modulos/
+    ├── dashboard/
+    ├── inventarios/
+    ├── inventario-reportes/
+    ├── prestamos/
+    ├── reservaciones/
+    ├── reportes/
+    └── salones/
+```
+
+## API connectivity
+
+In development, all requests to `/api/*` are proxied to the Java back end by `proxy.conf.json`. The `environment.ts` file sets `apiUrl` to `'/api'` so services never hard-code the origin.
+
+```json proxy.conf.json
+{
+  "/api": {
+    "target": "http://localhost:8080/IntegradoraII_Web",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "debug"
+  }
+}
+```

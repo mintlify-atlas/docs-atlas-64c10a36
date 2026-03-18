@@ -1,0 +1,115 @@
+---
+title: "Reservaciones"
+description: "Create and manage classroom reservations in the GAM system."
+---
+
+The Reservaciones module (`administrador/reservaciones.html`) allows administrators to schedule classroom usage for staff and students in the Edificio D – TICs division.
+
+## Summary cards
+
+Three counters are computed client-side from the full reservation list:
+
+| Card | Calculation |
+|---|---|
+| Total Reservas | Count of all reservations |
+| Pendientes | Count where `estatus = 'Pendiente'` |
+| Activas | Count where `estatus = 'Activo'` |
+
+## Table columns
+
+The table body (`#tablaReservas`) is rendered by `reservacion.js`:
+
+| Column | Source field | Notes |
+|---|---|---|
+| Usuario (Matrícula) | `res.matricula` | Shows a colored avatar with the last 2 characters |
+| Edificio | `res.nombreEdificio` | Muted small text |
+| Salón / Espacio | `res.nombreSalon` | Bold, brand color |
+| Fecha y Hora | `res.fechaHora` | `T` replaced with a space |
+| Estatus | `res.estatus` | Badge: yellow = Pendiente, green = Activo, red = Rechazado, cyan = Finalizado |
+| Acciones | — | Edit and Delete buttons |
+
+## Create / edit form fields
+
+Both create and update actions use the same `#reservaModal` dialog:
+
+| Field | ID | Type | Notes |
+|---|---|---|---|
+| Matrícula / Solicitante | `matricula` | text | Required |
+| Edificio | `edificioSelect` | select | Populated from `GET /api/reservacion/getSalones` |
+| Salón / Espacio | `salonSelect` | select | Filtered by selected building |
+| Fecha y Hora | `fecha` | `datetime-local` | Required |
+| Estatus | `estadoSelect` | select | Pendiente, Activo, Rechazado, Finalizado |
+
+<Info>
+  The building and classroom selects are loaded from a single call to `GET /api/reservacion/getSalones`, which returns all salons with their building names. The client filters them by the chosen building.
+</Info>
+
+## Creating a reservation
+
+<Steps>
+  <Step title="Open the New Reservation modal">
+    Click the **Nueva Reservación** button. The form is reset via `limpiarForm()` and the modal opens.
+  </Step>
+  <Step title="Enter the requester's matricula">
+    Type the matricula of the user requesting the space (e.g., `2024ADM01`). The user must already exist in the system.
+  </Step>
+  <Step title="Select building and classroom">
+    Choose a building from the **Edificio** dropdown. The **Salón** dropdown updates automatically with the classrooms in that building. Select the desired space.
+  </Step>
+  <Step title="Set date and time">
+    Use the **Fecha y Hora** datetime-local input to pick the reservation date and start time.
+  </Step>
+  <Step title="Set initial status">
+    Choose the starting status. Defaults to `Pendiente` for new reservations.
+  </Step>
+  <Step title="Submit">
+    Click **Guardar Reserva**. The client calls `POST /api/reservacion/insertar` with the form data serialized as `application/x-www-form-urlencoded` with a `reservacion` JSON parameter.
+
+    On success, the modal closes, the form resets, the table reloads, and an alert shows *"La reservación se guardó exitosamente."*
+  </Step>
+</Steps>
+
+## Editing a reservation
+
+Click the pencil icon for any row. The modal opens pre-populated with the reservation's current data. All fields can be changed, including the status. Saving calls `POST /api/reservacion/actualizar`.
+
+## Deleting a reservation
+
+Click the trash icon. A custom confirmation modal appears asking *"¿Estás seguro de que deseas eliminar esta reservación?"*. Confirming calls `POST /api/reservacion/eliminar` with `idReserva` as a form parameter.
+
+## Request payload (insertar / actualizar)
+
+The data is sent as URL-encoded form with a `reservacion` key containing a JSON string:
+
+```javascript
+const reservacionObj = {
+  idReserva: 0,          // 0 for new, existing ID for update
+  idUsuario: 1,          // hardcoded in current implementation
+  idSalon: salonElegido, // selected salon ID
+  fechaHora: "2026-03-18 10:00:00",
+  estatus: "Pendiente"
+};
+
+const formData = new URLSearchParams();
+formData.append("reservacion", JSON.stringify(reservacionObj));
+
+fetch(endpoint, {
+  method: "POST",
+  headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  body: formData.toString()
+});
+```
+
+<Warning>
+  The `idUsuario` field is currently hardcoded to `1` in `reservacion.js`. In a production deployment this should be read from `localStorage.getItem("id_usuario")`.
+</Warning>
+
+## API endpoints
+
+| Method | Path | Content-Type | Description |
+|---|---|---|---|
+| `GET` | `/api/reservacion/getAll` | — | List all reservations |
+| `GET` | `/api/reservacion/getSalones` | — | List all salons (with building) |
+| `POST` | `/api/reservacion/insertar` | `application/x-www-form-urlencoded` | Create a reservation |
+| `POST` | `/api/reservacion/actualizar` | `application/x-www-form-urlencoded` | Update a reservation |
+| `POST` | `/api/reservacion/eliminar` | `application/x-www-form-urlencoded` | Delete by `idReserva` |

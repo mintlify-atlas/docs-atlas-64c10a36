@@ -1,0 +1,224 @@
+---
+title: "Préstamos"
+description: "Endpoints for furniture loan tracking in GAM."
+---
+
+# Préstamos
+
+Base path: `/prestamos`
+
+Tracks the checkout and return of furniture items. A loan (`Prestamo`) ties a user (identified by `matricula`) to a specific furniture item (`id_mobiliario`) with checkout and expected/actual return dates.
+
+---
+
+## GET /prestamos/getAll
+
+Returns all loan records.
+
+### Response — 200 OK
+
+An array of `Prestamos` objects.
+
+<ResponseField name="id_prestamo" type="integer">
+  Loan identifier.
+</ResponseField>
+
+<ResponseField name="matricula" type="string">
+  Institutional ID of the borrower.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Full name of the borrower.
+</ResponseField>
+
+<ResponseField name="id_rol" type="string">
+  Role of the borrower, e.g. `"Docente"`.
+</ResponseField>
+
+<ResponseField name="id_turno" type="string">
+  Shift of the borrower.
+</ResponseField>
+
+<ResponseField name="correo" type="string">
+  Borrower email address.
+</ResponseField>
+
+<ResponseField name="telefono" type="string">
+  Borrower phone number.
+</ResponseField>
+
+<ResponseField name="id_mobiliario" type="string">
+  Furniture code of the borrowed item.
+</ResponseField>
+
+<ResponseField name="fecha_salida" type="string">
+  Checkout date, e.g. `"2025-06-10"`.
+</ResponseField>
+
+<ResponseField name="fecha_devolucion_prevista" type="string">
+  Expected return date.
+</ResponseField>
+
+<ResponseField name="fecha_devolucion_real" type="string">
+  Actual return date. Null/empty if not yet returned.
+</ResponseField>
+
+<ResponseField name="estatus_prestamo" type="string">
+  Loan status: `"Activo"`, `"Devuelto"`, `"Atrasado"`, or `"Extraviado"`.
+</ResponseField>
+
+<ResponseField name="observaciones_salida" type="string">
+  Notes recorded at checkout.
+</ResponseField>
+
+<ResponseField name="observaciones_entrada" type="string">
+  Notes recorded at return. Empty until the item is returned.
+</ResponseField>
+
+### Response — 500 Internal Server Error
+
+Plain text error message (not JSON).
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/prestamos/getAll
+```
+
+---
+
+## POST /prestamos/insert
+
+Registers a new loan. The backend resolves the user by `matricula` and links it to the specified furniture item.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="matricula" type="string" required>
+  Institutional ID of the borrower. Must match an existing active user.
+</ParamField>
+
+<ParamField body="id_mobiliario" type="string" required>
+  Furniture code of the item being lent.
+</ParamField>
+
+<ParamField body="fecha_devolucion_prevista" type="string" required>
+  Expected return date, e.g. `"2025-06-20"`.
+</ParamField>
+
+<ParamField body="observaciones_salida" type="string">
+  Optional notes about the item condition at checkout.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"result": "OK"}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "<error message>"}
+```
+
+<Note>
+  If the `matricula` does not correspond to a registered user the backend will throw an exception and return a 500 with the validation message in the `error` field.
+</Note>
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/prestamos/insert \
+  -H "Content-Type: application/json" \
+  -d '{
+    "matricula": "A12345",
+    "id_mobiliario": "SLB12-042",
+    "fecha_devolucion_prevista": "2025-06-20",
+    "observaciones_salida": "Silla en buen estado"
+  }'
+```
+
+---
+
+## POST /prestamos/update
+
+Updates an existing loan record — typically used to record a return or change the status.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="id_prestamo" type="integer" required>
+  ID of the loan to update.
+</ParamField>
+
+<ParamField body="estatus_prestamo" type="string">
+  Updated status: `"Activo"`, `"Devuelto"`, `"Atrasado"`, or `"Extraviado"`.
+</ParamField>
+
+<ParamField body="observaciones_entrada" type="string">
+  Notes recorded at the time of return.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"result": "OK"}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "<exception detail>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/prestamos/update \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id_prestamo": 12,
+    "estatus_prestamo": "Devuelto",
+    "observaciones_entrada": "Devuelto sin daños"
+  }'
+```
+
+---
+
+## POST /prestamos/delete
+
+Removes a loan record.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="id_prestamo" type="integer" required>
+  ID of the loan to delete.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"result": "OK"}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "<error message>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/prestamos/delete \
+  -H "Content-Type: application/json" \
+  -d '{"id_prestamo": 12}'
+```

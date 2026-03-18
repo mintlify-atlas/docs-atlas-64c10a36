@@ -1,0 +1,66 @@
+---
+title: "Introduction"
+description: "GAM is a full-stack academic resource management system for UTL that handles classroom reservations, inventory, equipment loans, and reporting."
+---
+
+# GAM — Gestor Académico para Mobiliario
+
+GAM (Academic Furniture Manager) is the institutional resource management platform for **UTL (Universidad Tecnológica de León)**. It provides administrators with full control over classrooms, furniture inventory, equipment loans, and room reservations — all from a unified web panel and a cross-platform mobile app.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Set up the system and log in for the first time in minutes
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Understand how the backend, web panel, and mobile app fit together
+  </Card>
+  <Card title="Web Admin Panel" icon="display" href="/web/overview">
+    Manage salones, inventory, reservations, loans, and users
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the full REST API surface exposed by the Java EE backend
+  </Card>
+</CardGroup>
+
+## What GAM manages
+
+<CardGroup cols={3}>
+  <Card title="Salones" icon="door-open">
+    Track every classroom, its building assignment, capacity, and equipment
+  </Card>
+  <Card title="Inventario" icon="box-archive">
+    Manage furniture and equipment items across all campus buildings
+  </Card>
+  <Card title="Reservaciones" icon="calendar">
+    Allow staff to reserve classrooms for specific time slots
+  </Card>
+  <Card title="Préstamos" icon="hand-holding">
+    Issue and track equipment loans to students and staff
+  </Card>
+  <Card title="Usuarios" icon="users">
+    Create and manage administrator and staff accounts using matricula-based auth
+  </Card>
+  <Card title="Reportes" icon="chart-bar">
+    Generate operational reports on usage, loans, and inventory status
+  </Card>
+</CardGroup>
+
+## System components
+
+GAM is composed of three main layers:
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| **Backend REST API** | Java EE (JAX-RS) + MySQL | Business logic and data persistence |
+| **Web Admin Panel** | HTML / JavaScript / Bootstrap 5 | Browser-based admin interface |
+| **Mobile App** | Ionic 8 + Angular 20 + Capacitor 8 | Cross-platform iOS/Android app |
+
+## Who uses GAM
+
+- **Administrators** — manage all system resources via the web panel or mobile app
+- **Staff** — create reservations and request equipment loans
+- **Institution** — UTL uses GAM to maintain full visibility over campus resource utilization
+
+<Note>
+  GAM is an internal institutional system. Access requires a valid UTL matricula and password issued by an administrator.
+</Note>

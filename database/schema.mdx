@@ -1,0 +1,653 @@
+---
+title: 'Database Schema'
+description: 'Complete reference for the db_gam MySQL database — tables, columns, constraints, relationships, and connection configuration for the GAM academic resource management system.'
+keywords: ['database', 'schema', 'MySQL', 'db_gam', 'tables', 'ERD', 'foreign keys']
+---
+
+## Overview
+
+GAM uses a single MySQL database named `db_gam`. The schema covers academic organization (divisions, careers, groups), people and users with role-based access, physical infrastructure (buildings and rooms), furniture inventory, reservations, loans, damage reports, and an activity log (bitácora).
+
+<Note>
+All `id_estatus` columns use a soft-delete pattern. Records are never physically deleted — they are marked `'Eliminado'` instead.
+</Note>
+
+### Database initialization
+
+```sql
+DROP DATABASE IF EXISTS db_gam;
+
+CREATE DATABASE IF NOT EXISTS db_gam;
+
+USE db_gam;
+```
+
+---
+
+## Connection configuration
+
+The Java back-end connects via `ConexionMySQL.java` using the MySQL Connector/J driver:
+
+```java
+String user     = "root";
+String password = "Melapelas2";
+String url      = "jdbc:mysql://localhost:3306/db_gam"
+                + "?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC";
+
+Class.forName("com.mysql.cj.jdbc.Driver");
+conn = DriverManager.getConnection(url, user, password);
+```
+
+<Warning>
+The credentials above are the development defaults committed to source control. Change `user` and `password` before deploying to any non-local environment.
+</Warning>
+
+| Parameter | Value |
+|-----------|-------|
+| Host | `localhost` |
+| Port | `3306` |
+| Database | `db_gam` |
+| Driver | `com.mysql.cj.jdbc.Driver` |
+| SSL | `false` |
+| Timezone | `UTC` |
+
+---
+
+## Tables
+
+The database contains **13 tables**:
+
+| Table | Purpose |
+|-------|---------|
+| `tbl_div_academica` | Academic divisions (e.g. Tecnologías de la Información) |
+| `tbl_carreras` | Degree programs belonging to a division |
+| `tbl_grupos` | Student groups / cohorts within a career |
+| `tbl_personas` | Physical persons — shared by users, students, and administrators |
+| `tbl_administrativos` | Administrative staff linked to a person and division |
+| `tbl_alumnos` | Students linked to a person and group |
+| `tbl_usuarios` | System accounts with role, shift, and status |
+| `tbl_edificios` | Campus buildings belonging to a division |
+| `tbl_salones` | Rooms (classrooms, labs, halls) inside buildings |
+| `tbl_inventario` | Individual furniture/equipment items assigned to rooms |
+| `tbl_reportes_mobiliario` | Damage or incident reports raised against inventory items |
+| `tbl_historial_reporte` | Audit trail of every status change on a report |
+| `tbl_reservaciones` | Room reservations made by users |
+| `tbl_prestamos_mobiliario` | Equipment loans checked out to users |
+| `tbl_bitacora` | System-wide activity log populated by triggers |
+
+---
+
+## Table details
+
+<AccordionGroup>
+
+  <Accordion title="tbl_div_academica — Academic divisions">
+
+  Catalog table for the top-level organizational units of UTL.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_div_academica` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `division_academica` | `VARCHAR(45)` | `NOT NULL` |
+
+  ```sql
+  CREATE TABLE tbl_div_academica (
+      id_div_academica INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      division_academica VARCHAR(45) NOT NULL
+  );
+  ```
+
+  **Seed data:** Tecnologías de la Información, Metal-Mecánica, Alimentos y Bebidas.
+
+  </Accordion>
+
+  <Accordion title="tbl_carreras — Degree programs">
+
+  Each career belongs to one academic division.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_carrera` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `carrera_descripcion` | `VARCHAR(50)` | `NOT NULL` |
+  | `id_div_academica` | `INT` | `NOT NULL`, `FK → tbl_div_academica` |
+
+  ```sql
+  CREATE TABLE tbl_carreras (
+      id_carrera INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      carrera_descripcion VARCHAR(50) NOT NULL,
+      id_div_academica INT NOT NULL,
+      FOREIGN KEY (id_div_academica) REFERENCES tbl_div_academica(id_div_academica)
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_grupos — Student groups">
+
+  Cohorts of students in a specific career and quarter.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_grupo` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `grupo` | `VARCHAR(50)` | `NOT NULL` |
+  | `descripcion_grupo` | `VARCHAR(50)` | `NOT NULL` |
+  | `no_cuatrimestre` | `INT` | `NOT NULL` |
+  | `id_carrera` | `INT` | `NOT NULL`, `FK → tbl_carreras` |
+
+  ```sql
+  CREATE TABLE tbl_grupos (
+      id_grupo INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      grupo VARCHAR(50) NOT NULL,
+      descripcion_grupo VARCHAR(50) NOT NULL,
+      no_cuatrimestre INT NOT NULL,
+      id_carrera INT NOT NULL,
+      FOREIGN KEY (id_carrera) REFERENCES tbl_carreras(id_carrera)
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_personas — People">
+
+  Base entity shared by users, students, and administrators. Stores all PII in one place.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_persona` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `nombre` | `VARCHAR(50)` | `NOT NULL` |
+  | `apellido_paterno` | `VARCHAR(50)` | `NOT NULL` |
+  | `apellido_materno` | `VARCHAR(50)` | — |
+  | `correo` | `VARCHAR(100)` | `NOT NULL`, `UNIQUE` |
+  | `telefono` | `VARCHAR(50)` | `NOT NULL` |
+  | `fecha_nacimiento` | `DATE` | `NOT NULL` |
+  | `direccion` | `VARCHAR(100)` | `NOT NULL` |
+
+  ```sql
+  CREATE TABLE tbl_personas(
+      id_persona INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      nombre VARCHAR(50) NOT NULL,
+      apellido_paterno VARCHAR(50) NOT NULL,
+      apellido_materno VARCHAR(50),
+      correo VARCHAR(100) NOT NULL UNIQUE,
+      telefono VARCHAR(50) NOT NULL,
+      fecha_nacimiento DATE NOT NULL,
+      direccion VARCHAR(100) NOT NULL
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_administrativos — Administrative staff">
+
+  Links a person record to a division and contract type.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_administrativo` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `id_persona` | `INT` | `NOT NULL`, `UNIQUE`, `FK → tbl_personas` |
+  | `id_contrato` | `ENUM('Base','Temporal')` | `NOT NULL` |
+  | `id_div_academica` | `INT` | `NOT NULL`, `FK → tbl_div_academica` |
+
+  ```sql
+  CREATE TABLE tbl_administrativos(
+      id_administrativo INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_persona INT NOT NULL UNIQUE,
+      id_contrato ENUM('Base', 'Temporal') NOT NULL,
+      id_div_academica INT NOT NULL,
+      FOREIGN KEY (id_persona) REFERENCES tbl_personas(id_persona) ON DELETE CASCADE ON UPDATE CASCADE,
+      FOREIGN KEY (id_div_academica) REFERENCES tbl_div_academica(id_div_academica)
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_alumnos — Students">
+
+  Links a person to a group.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_alumno` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `id_persona` | `INT` | `NOT NULL`, `FK → tbl_personas` (CASCADE) |
+  | `id_grupo` | `INT` | `NOT NULL`, `FK → tbl_grupos` |
+
+  ```sql
+  CREATE TABLE tbl_alumnos(
+      id_alumno INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_persona INT NOT NULL,
+      id_grupo INT NOT NULL,
+      FOREIGN KEY (id_persona) REFERENCES tbl_personas(id_persona) ON DELETE CASCADE ON UPDATE CASCADE,
+      FOREIGN KEY (id_grupo) REFERENCES tbl_grupos(id_grupo)
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_usuarios — System users">
+
+  Authentication and authorization table. Passwords are stored as SHA-256 hashes.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_usuario` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `id_persona` | `INT` | `NOT NULL`, `FK → tbl_personas` (CASCADE) |
+  | `matricula` | `VARCHAR(50)` | `NOT NULL`, `UNIQUE` |
+  | `password_hash` | `CHAR(64)` | `NOT NULL` — SHA-256 hex digest |
+  | `id_rol` | `ENUM('Administrador','Coordinador','Docente','Alumno')` | `NOT NULL` |
+  | `id_turno` | `ENUM('Matutino','Vespertino','Despresurizado')` | `NOT NULL` |
+  | `id_estatus` | `ENUM('Activo','Inactivo','Eliminado')` | `NOT NULL` |
+
+  ```sql
+  CREATE TABLE tbl_usuarios(
+      id_usuario INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_persona INT NOT NULL,
+      matricula VARCHAR(50) NOT NULL UNIQUE,
+      password_hash CHAR(64) NOT NULL,
+      id_rol ENUM(
+          'Administrador',
+          'Coordinador',
+          'Docente',
+          'Alumno'
+      ) NOT NULL,
+      id_turno ENUM(
+          'Matutino',
+          'Vespertino',
+          'Despresurizado'
+      ) NOT NULL,
+      id_estatus ENUM(
+          'Activo',
+          'Inactivo',
+          'Eliminado'
+      ) NOT NULL,
+      FOREIGN KEY (id_persona) REFERENCES tbl_personas(id_persona) ON DELETE CASCADE ON UPDATE CASCADE
+  );
+  ```
+
+  <Tip>
+  Passwords are hashed with `SHA2(password, 256)` at insert time. The `sp_login_usuario` procedure re-hashes the supplied plain-text password and compares it against `password_hash`.
+  </Tip>
+
+  </Accordion>
+
+  <Accordion title="tbl_edificios — Buildings">
+
+  Campus buildings that house rooms.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_edificio` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `nombre` | `VARCHAR(50)` | `NOT NULL`, `UNIQUE` |
+  | `id_div_academica` | `INT` | `NOT NULL`, `FK → tbl_div_academica` |
+  | `ubicacion` | `VARCHAR(150)` | `NOT NULL` |
+  | `pisos` | `INT` | `NOT NULL` |
+  | `total_salones` | `INT` | `NOT NULL` — denormalized counter, updated by `sp_insertar_salon` |
+  | `id_estatus` | `ENUM('Activo','Inactivo','Eliminado')` | `NOT NULL` |
+
+  ```sql
+  CREATE TABLE tbl_edificios(
+      id_edificio INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      nombre VARCHAR(50) NOT NULL UNIQUE,
+      id_div_academica INT NOT NULL,
+      ubicacion VARCHAR(150) NOT NULL,
+      pisos INT NOT NULL,
+      total_salones INT NOT NULL,
+      id_estatus ENUM(
+          'Activo',
+          'Inactivo',
+          'Eliminado'
+      ) NOT NULL,
+      FOREIGN KEY (id_div_academica) REFERENCES tbl_div_academica(id_div_academica)
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_salones — Rooms">
+
+  Classrooms, laboratories, and meeting rooms inside a building.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_salon` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `id_edificio` | `INT` | `NOT NULL`, `FK → tbl_edificios` (CASCADE) |
+  | `id_tipo_salon` | `ENUM('Salon','Laboratorio','Sala')` | `NOT NULL` |
+  | `nombre` | `VARCHAR(50)` | `NOT NULL`, `UNIQUE` |
+  | `capacidad_personas` | `INT` | `NOT NULL` |
+  | `id_estatus` | `ENUM('Activo','Inactivo','Eliminado')` | `NOT NULL` |
+
+  ```sql
+  CREATE TABLE tbl_salones(
+      id_salon INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_edificio INT NOT NULL,
+      id_tipo_salon ENUM(
+          'Salon',
+          'Laboratorio',
+          'Sala'
+      ) NOT NULL,
+      nombre VARCHAR(50) NOT NULL UNIQUE,
+      capacidad_personas INT NOT NULL,
+      id_estatus ENUM(
+          'Activo',
+          'Inactivo',
+          'Eliminado'
+      ) NOT NULL,
+      FOREIGN KEY (id_edificio) REFERENCES tbl_edificios(id_edificio) ON DELETE CASCADE ON UPDATE CASCADE
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_inventario — Furniture inventory">
+
+  Individual items of furniture or equipment, each identified by a unique `id_mobiliario` code and assigned to a specific room.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_inventario` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `id_salon` | `INT` | `NOT NULL`, `FK → tbl_salones` (CASCADE) |
+  | `id_mobiliario` | `VARCHAR(10)` | `NOT NULL` — unique asset code (e.g. `MOB001`) |
+  | `id_edificio` | `INT` | `NOT NULL`, `FK → tbl_edificios` (CASCADE) |
+  | `id_ubicacion` | `ENUM('Edificio','Administracion')` | — |
+  | `id_tipo_mobi` | `ENUM('Silla','Mesa','Pizarron','Ventana','Cañon','Pantalla','Extension','HDMI','Proyector')` | `NOT NULL` |
+  | `id_categoria_mobi` | `ENUM('Tecnología','Cables','Eléctrico','Papelería')` | `NOT NULL` |
+  | `id_estatus` | `ENUM('Activo','Inactivo','Eliminado')` | `NOT NULL` — logical lifecycle |
+  | `id_estatus_actual` | `ENUM('Disponible','En uso')` | `NOT NULL` — operational state |
+  | `observaciones` | `TEXT` | — |
+
+  ```sql
+  CREATE TABLE tbl_inventario (
+      id_inventario INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_salon INT NOT NULL,
+      id_mobiliario VARCHAR(10) NOT NULL,
+      id_edificio INT NOT NULL,
+      id_ubicacion ENUM('Edificio','Administracion'),
+      id_tipo_mobi ENUM(
+          'Silla',
+          'Mesa',
+          'Pizarron',
+          'Ventana',
+          'Cañon',
+          'Pantalla',
+          'Extension',
+          'HDMI',
+          'Proyector'
+      ) NOT NULL,
+      id_categoria_mobi ENUM(
+          'Tecnología',
+          'Cables',
+          'Eléctrico',
+          'Papelería'
+      ) NOT NULL,
+      id_estatus ENUM(
+          'Activo',
+          'Inactivo',
+          'Eliminado'
+      ) NOT NULL,
+      id_estatus_actual ENUM(
+          'Disponible',
+          'En uso'
+      ) NOT NULL,
+      observaciones TEXT,
+      FOREIGN KEY (id_salon) REFERENCES tbl_salones(id_salon) ON DELETE CASCADE ON UPDATE CASCADE,
+      FOREIGN KEY (id_edificio) REFERENCES tbl_edificios(id_edificio) ON DELETE CASCADE ON UPDATE CASCADE
+  );
+  ```
+
+  <Info>
+  `id_estatus` tracks the item's overall lifecycle (active, inactive, or deleted). `id_estatus_actual` tracks its moment-to-moment operational state (`Disponible` / `En uso`). The trigger `tg_actualizar_inventario_salida` automatically sets `id_estatus_actual = 'En Uso'` when a loan is created.
+  </Info>
+
+  </Accordion>
+
+  <Accordion title="tbl_reportes_mobiliario — Damage reports">
+
+  Incident reports raised by any user against a specific inventory item.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_reporte` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `id_usuario` | `INT` | `NOT NULL`, `FK → tbl_usuarios` |
+  | `id_inventario` | `INT` | `NOT NULL`, `FK → tbl_inventario` |
+  | `id_tipo_reporte` | `ENUM(...)` | `NOT NULL` — see values below |
+  | `descripcion` | `TEXT` | `NOT NULL` |
+  | `id_prioridad` | `ENUM('Baja','Media','Alta','Critica')` | `NOT NULL` |
+  | `fecha_reporte` | `TIMESTAMP` | default `CURRENT_TIMESTAMP` |
+  | `id_estatus_reporte` | `ENUM(...)` | `NOT NULL` — see values below |
+
+  **`id_tipo_reporte` values:** `'Daño por uso (Desgaste)'`, `'Rotura / Fractura'`, `'Vandalismo (Rayones/Grafiti)'`, `'Mobiliario Faltante'`, `'Mobiliario Excedente'`
+
+  **`id_estatus_reporte` values:** `'Pendiente'`, `'En Revisión'`, `'En Reparación'`, `'Solucionado'`, `'Rechazado'`, `'Baja Definitiva'`
+
+  ```sql
+  CREATE TABLE tbl_reportes_mobiliario (
+      id_reporte INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_usuario INT NOT NULL,
+      id_inventario INT NOT NULL,
+      id_tipo_reporte ENUM(
+          'Daño por uso (Desgaste)',
+          'Rotura / Fractura',
+          'Vandalismo (Rayones/Grafiti)',
+          'Mobiliario Faltante',
+          'Mobiliario Excedente'
+      ) NOT NULL,
+      descripcion TEXT NOT NULL,
+      id_prioridad ENUM(
+          'Baja',
+          'Media',
+          'Alta',
+          'Critica'
+      ) NOT NULL,
+      fecha_reporte TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      id_estatus_reporte ENUM(
+          'Pendiente',
+          'En Revisión',
+          'En Reparación',
+          'Solucionado',
+          'Rechazado',
+          'Baja Definitiva'
+      ) NOT NULL,
+      FOREIGN KEY (id_usuario) REFERENCES tbl_usuarios(id_usuario),
+      FOREIGN KEY (id_inventario) REFERENCES tbl_inventario(id_inventario)
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_historial_reporte — Report audit trail">
+
+  Records every status transition on a report, forming a complete audit history.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_historial` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `id_reporte` | `INT` | `NOT NULL`, `FK → tbl_reportes_mobiliario` (CASCADE DELETE) |
+  | `id_usuario` | `INT` | `NOT NULL`, `FK → tbl_usuarios` |
+  | `id_estatus_reporte_ant` | `ENUM(...)` | `NOT NULL` — previous status |
+  | `id_estatus_reporte_new` | `ENUM(...)` | `NOT NULL` — new status |
+  | `comentario` | `TEXT` | — |
+  | `fecha` | `TIMESTAMP` | default `CURRENT_TIMESTAMP` |
+
+  ```sql
+  CREATE TABLE tbl_historial_reporte (
+      id_historial INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_reporte INT NOT NULL,
+      id_usuario INT NOT NULL,
+      id_estatus_reporte_ant ENUM(
+          'Pendiente', 'En Revisión', 'En Reparación',
+          'Solucionado', 'Rechazado', 'Baja Definitiva'
+      ) NOT NULL,
+      id_estatus_reporte_new ENUM(
+          'Pendiente', 'En Revisión', 'En Reparación',
+          'Solucionado', 'Rechazado', 'Baja Definitiva'
+      ) NOT NULL,
+      comentario TEXT,
+      fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (id_reporte) REFERENCES tbl_reportes_mobiliario(id_reporte) ON DELETE CASCADE,
+      FOREIGN KEY (id_usuario) REFERENCES tbl_usuarios(id_usuario)
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_reservaciones — Room reservations">
+
+  Records room reservations made by any user.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_reserva` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `id_usuario` | `INT` | `NOT NULL`, `FK → tbl_usuarios` (CASCADE) |
+  | `id_salon` | `INT` | `NOT NULL`, `FK → tbl_salones` (CASCADE) |
+  | `fecha_hora` | `DATETIME` | `NOT NULL` |
+  | `estatus` | `ENUM('Pendiente','Activo','Rechazado','Finalizado','Eliminado')` | `NOT NULL` |
+
+  ```sql
+  CREATE TABLE tbl_reservaciones (
+      id_reserva INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_usuario INT NOT NULL,
+      id_salon INT NOT NULL,
+      fecha_hora DATETIME NOT NULL,
+      estatus ENUM('Pendiente', 'Activo', 'Rechazado', 'Finalizado', 'Eliminado') NOT NULL,
+      FOREIGN KEY (id_usuario) REFERENCES tbl_usuarios(id_usuario) ON DELETE CASCADE ON UPDATE CASCADE,
+      FOREIGN KEY (id_salon) REFERENCES tbl_salones(id_salon) ON DELETE CASCADE ON UPDATE CASCADE
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_prestamos_mobiliario — Equipment loans">
+
+  Tracks the check-out and return of individual inventory items.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_prestamo` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `id_usuario` | `INT` | `NOT NULL`, `FK → tbl_usuarios` |
+  | `id_inventario` | `INT` | `NOT NULL`, `FK → tbl_inventario` |
+  | `fecha_salida` | `TIMESTAMP` | default `CURRENT_TIMESTAMP` |
+  | `fecha_devolucion_prevista` | `DATETIME` | — |
+  | `fecha_devolucion_real` | `DATETIME NULL` | — set on return |
+  | `estatus_prestamo` | `ENUM('Activo','Devuelto','Atrasado','Extraviado','Eliminado')` | default `'Activo'` |
+  | `observaciones_salida` | `TEXT` | — |
+  | `observaciones_entrada` | `TEXT` | — set on return |
+
+  ```sql
+  CREATE TABLE tbl_prestamos_mobiliario (
+      id_prestamo INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      id_usuario INT NOT NULL,
+      id_inventario INT NOT NULL,
+      fecha_salida TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      fecha_devolucion_prevista DATETIME,
+      fecha_devolucion_real DATETIME NULL,
+      estatus_prestamo ENUM(
+          'Activo',
+          'Devuelto',
+          'Atrasado',
+          'Extraviado',
+          'Eliminado'
+      ) DEFAULT 'Activo',
+      observaciones_salida TEXT,
+      observaciones_entrada TEXT,
+      FOREIGN KEY (id_usuario) REFERENCES tbl_usuarios(id_usuario),
+      FOREIGN KEY (id_inventario) REFERENCES tbl_inventario(id_inventario)
+  );
+  ```
+
+  </Accordion>
+
+  <Accordion title="tbl_bitacora — Activity log">
+
+  Append-only log table populated automatically by database triggers. Used by the dashboard to show recent system activity.
+
+  | Column | Type | Constraints |
+  |--------|------|-------------|
+  | `id_bitacora` | `INT` | `NOT NULL`, `AUTO_INCREMENT`, `PRIMARY KEY` |
+  | `titulo` | `VARCHAR(100)` | `NOT NULL` |
+  | `descripcion` | `VARCHAR(255)` | `NOT NULL` |
+  | `fecha_actividad` | `DATETIME` | default `CURRENT_TIMESTAMP` |
+  | `autor` | `VARCHAR(100)` | default `'Sistema'` |
+
+  ```sql
+  CREATE TABLE tbl_bitacora (
+      id_bitacora INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      titulo VARCHAR(100) NOT NULL,
+      descripcion VARCHAR(255) NOT NULL,
+      fecha_actividad DATETIME DEFAULT CURRENT_TIMESTAMP,
+      autor VARCHAR(100) DEFAULT 'Sistema'
+  );
+  ```
+
+  </Accordion>
+
+</AccordionGroup>
+
+---
+
+## Entity relationships
+
+The diagram below summarizes the foreign key relationships between the core tables.
+
+```
+tbl_div_academica
+    ├── tbl_carreras
+    │       └── tbl_grupos
+    │               └── tbl_alumnos ──── tbl_personas
+    └── tbl_edificios
+            └── tbl_salones
+                    ├── tbl_inventario
+                    │       ├── tbl_reportes_mobiliario ── tbl_historial_reporte
+                    │       └── tbl_prestamos_mobiliario
+                    └── tbl_reservaciones
+
+tbl_personas
+    ├── tbl_administrativos
+    └── tbl_usuarios
+            ├── tbl_reportes_mobiliario
+            ├── tbl_historial_reporte
+            ├── tbl_reservaciones
+            └── tbl_prestamos_mobiliario
+
+tbl_reservaciones  ──► tbl_bitacora  (via trigger)
+tbl_reportes_mobiliario ──► tbl_bitacora  (via trigger)
+tbl_prestamos_mobiliario ──► tbl_inventario.id_estatus_actual  (via trigger)
+```
+
+### Key foreign key summary
+
+| Child table | Column | References | On delete/update |
+|-------------|--------|------------|------------------|
+| `tbl_carreras` | `id_div_academica` | `tbl_div_academica` | — |
+| `tbl_grupos` | `id_carrera` | `tbl_carreras` | — |
+| `tbl_alumnos` | `id_persona` | `tbl_personas` | CASCADE both |
+| `tbl_alumnos` | `id_grupo` | `tbl_grupos` | — |
+| `tbl_administrativos` | `id_persona` | `tbl_personas` | CASCADE both |
+| `tbl_administrativos` | `id_div_academica` | `tbl_div_academica` | — |
+| `tbl_usuarios` | `id_persona` | `tbl_personas` | CASCADE both |
+| `tbl_edificios` | `id_div_academica` | `tbl_div_academica` | — |
+| `tbl_salones` | `id_edificio` | `tbl_edificios` | CASCADE both |
+| `tbl_inventario` | `id_salon` | `tbl_salones` | CASCADE both |
+| `tbl_inventario` | `id_edificio` | `tbl_edificios` | CASCADE both |
+| `tbl_reportes_mobiliario` | `id_usuario` | `tbl_usuarios` | — |
+| `tbl_reportes_mobiliario` | `id_inventario` | `tbl_inventario` | — |
+| `tbl_historial_reporte` | `id_reporte` | `tbl_reportes_mobiliario` | CASCADE delete |
+| `tbl_historial_reporte` | `id_usuario` | `tbl_usuarios` | — |
+| `tbl_reservaciones` | `id_usuario` | `tbl_usuarios` | CASCADE both |
+| `tbl_reservaciones` | `id_salon` | `tbl_salones` | CASCADE both |
+| `tbl_prestamos_mobiliario` | `id_usuario` | `tbl_usuarios` | — |
+| `tbl_prestamos_mobiliario` | `id_inventario` | `tbl_inventario` | — |
+
+---
+
+## Views
+
+The schema also defines several views used by the application layer:
+
+| View | Defined in | Description |
+|------|------------|-------------|
+| `view_inventario_general` | `03_Modulo_inventarioGeneral.sql` | Aggregate counts of items by type and category, active items only |
+| `view_detalle_salon_completo` | `05_CRUD_ModuloSalones.sql` | Full room detail including building, division, and grouped furniture counts |
+| `view_salones_tabla` | `05_CRUD_ModuloSalones.sql` | Flat join of rooms with building name for list views |
+| `v_salones_edificios` | `04_Modulo_Reservaciones.sql` | Active rooms with their building name, used for reservation dropdowns |
+| `v_reservaciones_detalle` | `04_Modulo_Reservaciones.sql` | Reservations joined with user matricula, room, and building |
+| `view_reportes_recientes` | `07_Modulo_Reportes.sql` | Most recent report per inventory item |
+| `view_prestamos_inventario` | `08_Modulo_Prestamos.sql` | Active loans joined with user and person details |

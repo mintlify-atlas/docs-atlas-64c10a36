@@ -1,0 +1,331 @@
+---
+title: "Inventario"
+description: "Endpoints for furniture inventory management in GAM."
+---
+
+# Inventario
+
+Base path: `/inventario`
+
+Manages individual furniture units (chairs, desks, projectors, etc.) across buildings and classrooms. Each item is linked to a specific classroom (`id_salon`) and building (`id_edificio`). The summary endpoints group items by material type; the detail endpoint resolves individual unit records.
+
+---
+
+## GET /inventario/getAll
+
+Returns a summary list of all inventory groups, aggregated by material type.
+
+### Response — 200 OK
+
+An array of `Inventario` objects.
+
+<ResponseField name="nombre" type="string">
+  Display name of the material.
+</ResponseField>
+
+<ResponseField name="material" type="string">
+  Material type identifier, e.g. `"Silla"`, `"Proyector"`.
+</ResponseField>
+
+<ResponseField name="categoria" type="string">
+  Category, e.g. `"Mobiliario"`, `"Equipo"`.
+</ResponseField>
+
+<ResponseField name="total" type="integer">
+  Total units registered.
+</ResponseField>
+
+<ResponseField name="disponibles" type="integer">
+  Units currently available.
+</ResponseField>
+
+<ResponseField name="uso" type="integer">
+  Units currently in use.
+</ResponseField>
+
+<ResponseField name="pct_disponibles" type="number">
+  Availability percentage (0–100).
+</ResponseField>
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/inventario/getAll
+```
+
+---
+
+## GET /inventario/getByName
+
+Returns the individual unit records for a given material type, including their exact location (building, classroom, physical spot).
+
+### Query Parameters
+
+<ParamField query="nombre" type="string" required>
+  Material name to search for, e.g. `"Silla"`. Must not be empty.
+</ParamField>
+
+### Response — 200 OK
+
+An array of `Inventario` objects, one per unit.
+
+<ResponseField name="id_inventario" type="integer">
+  Unique item identifier.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Item name.
+</ResponseField>
+
+<ResponseField name="id_mobiliario" type="string">
+  Furniture code / identifier string.
+</ResponseField>
+
+<ResponseField name="nombreEdificio" type="string">
+  Building where this unit is located.
+</ResponseField>
+
+<ResponseField name="nombreSalon" type="string">
+  Classroom where this unit is located.
+</ResponseField>
+
+<ResponseField name="ubicacion" type="string">
+  Physical spot within the classroom.
+</ResponseField>
+
+<ResponseField name="estatus" type="string">
+  Current status of the item, e.g. `"Disponible"`, `"En uso"`.
+</ResponseField>
+
+<ResponseField name="capacidad" type="integer">
+  Capacity value associated with the classroom.
+</ResponseField>
+
+### Response — 400 Bad Request
+
+```json
+{"error": "El nombre del material es requerido"}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "Error al obtener detalles: <detail>"}
+```
+
+### Example
+
+```bash
+curl -s "http://localhost:8080/IntegradoraII_Web/webresources/inventario/getByName?nombre=Silla"
+```
+
+---
+
+## POST /inventario/save
+
+Registers a new furniture unit. The stored procedure on the database may validate that the classroom belongs to the specified building.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="id_salon" type="integer" required>
+  ID of the classroom where the item is located.
+</ParamField>
+
+<ParamField body="id_edificio" type="integer" required>
+  ID of the building.
+</ParamField>
+
+<ParamField body="id_mobiliario" type="string" required>
+  Furniture code, e.g. `"SLB12-001"`.
+</ParamField>
+
+<ParamField body="material" type="string" required>
+  Material type, e.g. `"Silla"`, `"Mesa"`.
+</ParamField>
+
+<ParamField body="categoria" type="string" required>
+  Category, e.g. `"Mobiliario"`.
+</ParamField>
+
+<ParamField body="ubicacion" type="string">
+  Physical location within the classroom, e.g. `"Fila 3"`.
+</ParamField>
+
+<ParamField body="estatus" type="string">
+  Administrative status, e.g. `"Activo"`. Defaults to `"Activo"`.
+</ParamField>
+
+<ParamField body="id_estatus_actual" type="string">
+  Operational status, e.g. `"Disponible"`. Defaults to `"Disponible"`.
+</ParamField>
+
+<ParamField body="observaciones" type="string">
+  Optional notes.
+</ParamField>
+
+### Response — 201 Created
+
+```json
+{"result": "Registro de inventario exitoso"}
+```
+
+### Response — 400 Bad Request (DB validation failure)
+
+```json
+{"error": "Error en base de datos: <detail>"}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "Error interno: <detail>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/inventario/save \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id_salon": 3,
+    "id_edificio": 1,
+    "id_mobiliario": "SLB12-042",
+    "material": "Silla",
+    "categoria": "Mobiliario",
+    "ubicacion": "Fila 4",
+    "estatus": "Activo",
+    "id_estatus_actual": "Disponible",
+    "observaciones": ""
+  }'
+```
+
+---
+
+## POST /inventario/update
+
+Updates the status or location details of an existing inventory item.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="id_inventario" type="integer" required>
+  ID of the item to update.
+</ParamField>
+
+<ParamField body="id_estatus_actual" type="string">
+  New operational status, e.g. `"Disponible"`, `"En uso"`, `"Dañado"`.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"result": "OK"}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "<exception detail>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/inventario/update \
+  -H "Content-Type: application/json" \
+  -d '{"id_inventario": 42, "id_estatus_actual": "En uso"}'
+```
+
+---
+
+## POST /inventario/delete
+
+Removes an inventory item record.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="id_inventario" type="integer" required>
+  ID of the item to delete.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"result": "OK"}
+```
+
+### Response — 500 Internal Server Error
+
+```json
+{"error": "<error message>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/inventario/delete \
+  -H "Content-Type: application/json" \
+  -d '{"id_inventario": 42}'
+```
+
+---
+
+## GET /inventario/getEdificios
+
+Returns the list of all buildings. Used to populate the building selector in the inventory registration form.
+
+### Response — 200 OK
+
+An array of `Edificios` objects.
+
+<ResponseField name="id_edificio" type="integer">
+  Building identifier.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Building name.
+</ResponseField>
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/inventario/getEdificios
+```
+
+---
+
+## GET /inventario/getSalones
+
+Returns the classrooms that belong to a specific building. Used to cascade the classroom selector after a building is chosen.
+
+### Query Parameters
+
+<ParamField query="idEdificio" type="integer" required>
+  ID of the building whose classrooms to retrieve.
+</ParamField>
+
+### Response — 200 OK
+
+An array of `Salones` objects (partial fields).
+
+<ResponseField name="idSalon" type="integer">
+  Classroom identifier.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Classroom name.
+</ResponseField>
+
+### Example
+
+```bash
+curl -s "http://localhost:8080/IntegradoraII_Web/webresources/inventario/getSalones?idEdificio=1"
+```

@@ -1,0 +1,233 @@
+---
+title: "Architecture"
+description: "How GAM's three layers — MySQL database, Java EE REST API, and client applications — fit together."
+---
+
+GAM follows a classic three-tier architecture. A MySQL database holds all persistent data, a Java EE backend exposes it through a stateless REST API, and two separate clients (a web admin panel and a mobile app) consume that API.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Client tier                          │
+│                                                             │
+│   ┌───────────────────────┐   ┌─────────────────────────┐  │
+│   │   Web Admin Panel     │   │     Mobile App          │  │
+│   │   HTML / Bootstrap 5  │   │  Ionic 8 · Angular 20   │  │
+│   │   Plain JS (main.js)  │   │  Capacitor 8            │  │
+│   └──────────┬────────────┘   └───────────┬─────────────┘  │
+└──────────────┼────────────────────────────┼────────────────┘
+               │   HTTP/JSON (fetch / HttpClient)             
+               ▼                            ▼                 
+┌─────────────────────────────────────────────────────────────┐
+│                      Application tier                       │
+│                                                             │
+│   GlassFish 7  ·  Jakarta EE 10  ·  JAX-RS (Jersey)        │
+│                                                             │
+│   Context root : /IntegradoraII_Web                         │
+│   API base     : /IntegradoraII_Web/api/                    │
+│                                                             │
+│   ┌────────────┐   ┌──────────────┐   ┌──────────────────┐ │
+│   │ REST layer │──▶│  Controller  │──▶│   Model / POJO   │ │
+│   │ org.utl.   │   │  org.utl.    │   │   org.utl.       │ │
+│   │ dsm.rest   │   │  dsm...      │   │   dsm...model    │ │
+│   │            │   │  controller  │   │                  │ │
+│   └────────────┘   └──────┬───────┘   └──────────────────┘ │
+└──────────────────────────┼──────────────────────────────────┘
+                            │   JDBC (mysql-connector-j)       
+                            ▼                                  
+┌─────────────────────────────────────────────────────────────┐
+│                        Data tier                            │
+│                                                             │
+│   MySQL 8  ·  Database: db_gam  ·  Port: 3306              │
+│                                                             │
+│   13 tables: tbl_div_academica, tbl_carreras, tbl_grupos,  │
+│   tbl_personas, tbl_administrativos, tbl_alumnos,           │
+│   tbl_usuarios, tbl_edificios, tbl_salones, tbl_inventario, │
+│   tbl_prestamos_mobiliario, tbl_reportes_mobiliario,        │
+│   tbl_reservaciones, tbl_bitacora                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Components
+
+<Columns cols={2}>
+  <Card title="MySQL database" icon="database">
+    **Technology:** MySQL 8, database `db_gam`
+
+    Stores all entities: users, buildings, classrooms, inventory items, loans, damage reports, reservations, and the audit log. Every table uses `ENUM` columns for controlled-vocabulary fields (status, roles, item types) and `FOREIGN KEY` constraints to enforce referential integrity.
+  </Card>
+  <Card title="Java EE REST API" icon="server">
+    **Technology:** Jakarta EE 10, JAX-RS (Jersey), GlassFish 7
+
+    A WAR project (`IntegradoraII_Web`) that exposes a stateless JSON API under `/api/*`. It depends on `IntegradoraWeb_core`, a plain Java library that contains the MVC layers. All responses are serialized with Gson.
+  </Card>
+  <Card title="Web admin panel" icon="browser">
+    **Technology:** HTML5, Bootstrap 5, plain JavaScript
+
+    Static files served directly by GlassFish from the WAR's `web/` directory. The login page (`index.html`) calls `POST /api/usuario/login` and stores the session in `localStorage`. Subsequent pages read `id_rol` to gate access.
+  </Card>
+  <Card title="Mobile app" icon="mobile">
+    **Technology:** Ionic 8, Angular 20, Capacitor 8
+
+    A cross-platform app (`appId: io.ionic.starter`) targeting Android and iOS. The Angular `HttpClient` calls the same REST API as the web panel. Capacitor bridges native device APIs (haptics, keyboard, status bar).
+  </Card>
+</Columns>
+
+---
+
+## Component and technology summary
+
+| Component | Technology | Responsibility |
+|---|---|---|
+| Database | MySQL 8 · `db_gam` | Persistent storage of all academic and resource data |
+| DB connection | JDBC · `mysql-connector-j` | Opens `localhost:3306/db_gam` from `ConexionMySQL.java` |
+| Backend library | Java 17 · `IntegradoraWeb_core` | Model POJOs, controller business logic, DB access |
+| REST API | JAX-RS (Jersey) · `IntegradoraII_Web` | HTTP endpoints, JSON serialization (Gson), routing |
+| Application server | GlassFish 7 · Jakarta EE 10 | Hosts the WAR, manages servlet lifecycle |
+| Web panel | HTML5 · Bootstrap 5 · JavaScript | Admin UI served from the WAR's `web/` directory |
+| Mobile app | Ionic 8 · Angular 20 · Capacitor 8 | Cross-platform client (`io.ionic.starter`) |
+
+---
+
+## REST API routing
+
+The REST servlet is registered in `WEB-INF/web.xml` with the pattern `/api/*` and scans the package `org.utl.dsm.rest` for resource classes.
+
+```
+Base URL:  http://localhost:8080/IntegradoraII_Web/api/
+```
+
+Each resource class carries a `@Path` annotation that becomes the next path segment:
+
+| Resource class | `@Path` | Example endpoint |
+|---|---|---|
+| `RESTUsuarios` | `usuario` | `POST /api/usuario/login` |
+| `RESTSalones` | `salones` | `GET /api/salones/getAll` |
+| `RESTInventario` | `inventario` | `GET /api/inventario/getAll` |
+| `RESTPrestamos` | *(see class)* | `POST /api/.../insertar` |
+| `RESTReportes` | *(see class)* | `POST /api/.../insertar` |
+| `RestReservacion` | *(see class)* | `POST /api/.../insertar` |
+
+<Note>
+  All resource endpoints produce and consume `application/json`. The login endpoint (`POST /api/usuario/login`) is the only one that does not require a prior authentication token — all other calls should include the user's `id_usuario` from `localStorage` as needed by the specific controller.
+</Note>
+
+---
+
+## Package structure
+
+The backend code is divided across two NetBeans projects.
+
+### `IntegradoraWeb_core` — shared library
+
+```
+src/
+└── org/utl/dsm/integradoraweb/
+    ├── db/
+    │   └── ConexionMySQL.java          # JDBC connection helper
+    ├── controller/
+    │   ├── ControllerUsuarios.java     # User authentication and CRUD
+    │   ├── ControllerSalones.java      # Classroom management
+    │   ├── ControllerInventario.java   # Inventory item management
+    │   ├── ControllerPrestamos.java    # Loan lifecycle
+    │   ├── ControllerReporte.java      # Damage report management
+    │   ├── ControllerReservacion.java  # Classroom reservation management
+    │   └── ControllerDashboardAdmin.java # Dashboard aggregates
+    └── model/
+        └── *.java                      # Plain Java POJOs (one per DB entity)
+```
+
+### `IntegradoraII_Web` — web application (WAR)
+
+```
+src/
+└── java/org/utl/dsm/rest/
+    ├── RESTUsuarios.java     # @Path("usuario")
+    ├── RESTSalones.java      # @Path("salones")
+    ├── RESTInventario.java   # @Path("inventario")
+    ├── RESTPrestamos.java
+    ├── RESTReportes.java
+    ├── RESTMoviliario.java
+    └── RestReservacion.java
+web/
+├── index.html                # Login page
+├── main.js                   # Login logic and sidebar nav
+├── login.css
+├── assets/
+└── administrador/
+    └── dashboard.html        # Post-login landing page
+```
+
+---
+
+## Data flow — login example
+
+The login flow illustrates how all three tiers cooperate:
+
+<Steps>
+  <Step title="Browser submits credentials">
+    `main.js` intercepts the form submit and sends a `POST` request to the API:
+
+    ```javascript
+    fetch("http://localhost:8080/IntegradoraII_Web/api/usuario/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ matricula: nombreUsuario, contrasenia: contrasenia })
+    });
+    ```
+  </Step>
+  <Step title="JAX-RS deserializes the request">
+    `RESTUsuarios.java` receives the body as a `Usuarios` POJO (Jackson/Gson maps `matricula` and `contrasenia` fields automatically), then delegates to the controller:
+
+    ```java
+    // RESTUsuarios.java — @POST @Path("login")
+    Usuarios u = ctrl.login(ul.getMatricula(), ul.getContrasenia());
+    ```
+  </Step>
+  <Step title="Controller queries the database">
+    `ControllerUsuarios` opens a JDBC connection via `ConexionMySQL`, runs a `SELECT` against `tbl_usuarios` (joining `tbl_personas`), and verifies `id_estatus = 'Activo'`. It returns `null` if no matching active user is found.
+  </Step>
+  <Step title="REST layer returns JSON">
+    On success the endpoint serializes the `Usuarios` object with Gson and returns `HTTP 200`. On failure it returns `HTTP 401` with `{"error": "Credenciales inválidas o usuario inactivo."}`.
+  </Step>
+  <Step title="Browser stores session and redirects">
+    `main.js` writes `id_usuario`, `id_rol`, `nombre_usuario`, and `matricula` to `localStorage`, then navigates to `administrador/dashboard.html`.
+  </Step>
+</Steps>
+
+---
+
+## Database schema overview
+
+The `db_gam` schema organizes its 14 tables into three domains:
+
+<Tabs>
+  <Tab title="Academic structure">
+    | Table | Purpose |
+    |---|---|
+    | `tbl_div_academica` | Academic divisions (faculties/departments) |
+    | `tbl_carreras` | Degree programs, linked to a division |
+    | `tbl_grupos` | Student groups per program and term |
+    | `tbl_administrativos` | Administrative staff records |
+    | `tbl_alumnos` | Student records linked to a group |
+  </Tab>
+  <Tab title="Users and access">
+    | Table | Purpose |
+    |---|---|
+    | `tbl_personas` | Base person record (shared by users, students, staff) |
+    | `tbl_usuarios` | Login credentials, role (`Administrador` · `Coordinador` · `Docente` · `Alumno`), status |
+  </Tab>
+  <Tab title="Resources and operations">
+    | Table | Purpose |
+    |---|---|
+    | `tbl_edificios` | Campus buildings |
+    | `tbl_salones` | Classrooms and labs within buildings |
+    | `tbl_inventario` | Individual inventory items (furniture, tech, cables…) |
+    | `tbl_prestamos_mobiliario` | Loan records for inventory items |
+    | `tbl_reportes_mobiliario` | Damage or issue reports per item |
+    | `tbl_historial_reporte` | Audit trail of report status changes |
+    | `tbl_reservaciones` | Classroom reservation requests |
+    | `tbl_bitacora` | System-wide activity log |
+  </Tab>
+</Tabs>

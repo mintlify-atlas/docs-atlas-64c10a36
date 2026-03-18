@@ -1,0 +1,135 @@
+---
+title: "Login"
+description: "How to authenticate into the GAM web admin panel using matricula and password."
+---
+
+The login page is the entry point of the web application (`index.html`). It presents a branded form with the UTL logo, a matricula field, and a password field.
+
+<Info>
+  Credentials are sent as JSON to the REST endpoint `POST /usuario/login`. A successful response stores session data in `localStorage` and redirects to `administrador/dashboard.html`.
+</Info>
+
+## Login flow
+
+<Steps>
+  <Step title="Open the application">
+    Navigate to the root URL of the deployed application. The `index.html` login page loads automatically.
+  </Step>
+  <Step title="Enter credentials">
+    Fill in:
+    - **Usuario / Matrícula** — the user's institutional matricula (e.g., `2024ADM01`).
+    - **Contraseña** — the account password.
+
+    Both fields are required. Submitting with empty fields triggers an alert: *"Por favor, completa todos los campos."*
+  </Step>
+  <Step title="Submit the form">
+    Click **Iniciar Sesión**. The form's `submit` event is intercepted by JavaScript; the page does not reload.
+  </Step>
+  <Step title="API authentication">
+    The client sends a `POST` request to the backend with a JSON body containing `matricula` and `contrasenia`.
+  </Step>
+  <Step title="Session stored and redirect">
+    On a `200 OK` response the following keys are written to `localStorage` and the browser redirects to the dashboard:
+
+    | Key | Value |
+    |---|---|
+    | `id_usuario` | Numeric user ID |
+    | `id_rol` | Role string (e.g., `Administrador`) |
+    | `nombre_usuario` | `nombre + apellido_paterno` |
+    | `matricula` | User's matricula |
+  </Step>
+</Steps>
+
+## JavaScript login code
+
+The full authentication logic lives in `web/main.js`:
+
+```javascript
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const nombreUsuario = usernameInput.value.trim();
+  const contrasenia = passwordInput.value.trim();
+
+  if (!nombreUsuario || !contrasenia) {
+    alert("Por favor, completa todos los campos.");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      "http://localhost:8080/IntegradoraII_Web/api/usuario/login",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matricula: nombreUsuario,
+          contrasenia: contrasenia,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (response.ok) {
+      localStorage.setItem("id_usuario", data.id_usuario);
+      localStorage.setItem("id_rol", data.id_rol);
+      localStorage.setItem(
+        "nombre_usuario",
+        `${data.nombre} ${data.apellido_paterno}`
+      );
+      localStorage.setItem("matricula", data.matricula);
+
+      window.location.href = "administrador/dashboard.html";
+    } else {
+      alert(data.error || "Credenciales incorrectas.");
+    }
+  } catch (error) {
+    alert("No se pudo conectar al servidor. Intenta más tarde.");
+  }
+});
+```
+
+## API endpoint
+
+```http
+POST /IntegradoraII_Web/api/usuario/login
+Content-Type: application/json
+
+{
+  "matricula": "2024ADM01",
+  "contrasenia": "mi_contraseña"
+}
+```
+
+**Success — HTTP 200**
+
+```json
+{
+  "id_usuario": 1,
+  "id_rol": "Administrador",
+  "nombre": "Juan",
+  "apellido_paterno": "García",
+  "matricula": "2024ADM01"
+}
+```
+
+**Failure — HTTP 401**
+
+```json
+{
+  "error": "Credenciales inválidas o usuario inactivo."
+}
+```
+
+## Error messages
+
+| Condition | Message shown |
+|---|---|
+| Empty field(s) | *"Por favor, completa todos los campos."* |
+| Wrong credentials / inactive account | Value of `data.error`, fallback: *"Credenciales incorrectas."* |
+| Network or server unreachable | *"No se pudo conectar al servidor. Intenta más tarde."* |
+
+<Warning>
+  The login page does not implement a "forgot password" recovery flow. The link present in the HTML (`¿Olvidaste tu contraseña?`) currently points to `/` and has no backend support.
+</Warning>

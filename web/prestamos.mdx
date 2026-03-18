@@ -1,0 +1,131 @@
+---
+title: "Préstamos"
+description: "Register and track equipment loans and returns across the UTL division."
+---
+
+The Préstamos module (`administrador/prestamos.html`) handles the lending of furniture and equipment to staff and students. Administrators can register new loans, update their status on return, and delete records.
+
+<Note>
+  Edit and delete buttons are only visible to users whose `id_rol` in `localStorage` is `"administrador"` (case-insensitive). The **view details** button is always visible.
+</Note>
+
+## Summary cards
+
+Four counters are computed from the loan list returned by `GET /api/prestamos/getAll`:
+
+| Card | DOM ID | Calculation |
+|---|---|---|
+| Total Préstamos | `#cardTotal` | Total records |
+| En Uso | `#cardEnUso` | Count where `estatus_prestamo = 'Activo'` |
+| Disponibles | `#cardDisponibles` | Count where `estatus_prestamo = 'Devuelto'` |
+| Atrasados | `#cardAtrasados` | Count of `'Atrasado'` + `'Extraviado'` |
+
+## Table columns
+
+The main table (`#tablaPrestamo`) is rendered by `prestamos.js`:
+
+| Column | Source field | Notes |
+|---|---|---|
+| Matrícula | `item.matricula` | User who borrowed the item |
+| Mobiliario | `item.id_mobiliario` | Item ID / furniture code |
+| Fecha Salida | `item.fecha_salida` | Loan date |
+| Fecha Devolución | `item.fecha_devolucion_real` | Actual return date (if returned) |
+| Estado | `item.estatus_prestamo` | Yellow = Activo, Red = Atrasado/Extraviado, Green = Devuelto |
+| Observaciones | `item.observaciones_salida` | Exit condition notes |
+| Acciones | — | Edit, Delete (admin only), View |
+
+## Registering a new loan
+
+<Steps>
+  <Step title="Open the New Loan modal">
+    Click **Nuevo Préstamo**. The `#modalNuevoPrestamo` dialog opens.
+  </Step>
+  <Step title="Enter the borrower's matricula">
+    Type the matricula in **Matrícula del Usuario** (e.g., `2024ADM01`). The API validates that this matricula is registered; if not, the error *"La matrícula '...' no está registrada."* is shown.
+  </Step>
+  <Step title="Enter the furniture ID">
+    Type the furniture code in **ID Mobiliario / Inventario** (e.g., `MOB001`).
+  </Step>
+  <Step title="Set the expected return date">
+    Use the **Fecha de Devolución Prevista** datetime-local input.
+  </Step>
+  <Step title="Add exit notes (optional)">
+    Describe the item's condition at the time of lending in the **Observaciones de Salida** textarea.
+  </Step>
+  <Step title="Register the loan">
+    Click **Registrar Préstamo**. The client calls `POST /api/prestamos/insert` with a JSON body. The initial status is set to `Activo` by the server.
+  </Step>
+</Steps>
+
+## New loan JSON payload
+
+```javascript
+const datos = {
+  matricula: "2024ADM01",
+  id_mobiliario: "MOB001",
+  fecha_devolucion_prevista: "2026-03-25T10:00",
+  observaciones_salida: "En buen estado, sin daños"
+};
+
+fetch("http://localhost:8080/IntegradoraII_Web/api/prestamos/insert", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(datos)
+});
+```
+
+## Returning / updating a loan
+
+Click the pencil icon for a loan record. The `#modalEditarPrestamo` dialog opens showing the **return configuration** section:
+
+| Field | ID | Options |
+|---|---|---|
+| Estatus del Préstamo | `editEstatus` | Activo, Devuelto, Atrasado, Extraviado |
+| Observaciones de Entrega | `editObservacionesEntrada` | Free text — describe return condition |
+
+Clicking **Guardar Cambios** calls `POST /api/prestamos/update` with:
+
+```json
+{
+  "id_prestamo": 5,
+  "estatus_prestamo": "Devuelto",
+  "observaciones_entrada": "Se entrega en buen estado."
+}
+```
+
+## Viewing loan details
+
+Clicking the eye icon for any row opens `#modalDetallePrestamo` (large modal), populated entirely from the in-memory `listaGlobalPrestamos` array without an extra API call. The detail view is divided into three sections:
+
+<Accordion title="Datos del Usuario">
+  - Nombre completo
+  - Matrícula
+  - Rol (`id_rol`)
+  - Turno (`id_turno`)
+  - Contacto: correo / teléfono
+</Accordion>
+
+<Accordion title="Información del Préstamo">
+  - ID Mobiliario
+  - Estatus (badge with contextual color)
+  - Fecha de Salida
+  - Fecha de Devolución Prevista
+</Accordion>
+
+<Accordion title="Observaciones">
+  - Salida — notes recorded when the item was lent out
+  - Entrada / Reporte — notes recorded on return (or *"Sin registro de devolución aún"* if not yet returned)
+</Accordion>
+
+## Deleting a loan
+
+The trash button (admin only) triggers a SweetAlert2 confirmation. Confirming calls `POST /api/prestamos/delete` with `{ "id_prestamo": <id> }`.
+
+## API endpoints
+
+| Method | Path | Content-Type | Description |
+|---|---|---|---|
+| `GET` | `/api/prestamos/getAll` | — | List all loans |
+| `POST` | `/api/prestamos/insert` | `application/json` | Register a new loan |
+| `POST` | `/api/prestamos/update` | `application/json` | Update status/notes |
+| `POST` | `/api/prestamos/delete` | `application/json` | Delete by `id_prestamo` |

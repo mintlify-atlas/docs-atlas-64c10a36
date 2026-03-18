@@ -1,0 +1,120 @@
+---
+title: "API Overview"
+description: "Base URL, authentication, content types, and a complete index of all GAM REST endpoints."
+---
+
+# API Overview
+
+The GAM backend exposes a JAX-RS REST API deployed on a Java EE application server (GlassFish / Payara). All resources are mounted under the base path `/IntegradoraII_Web/webresources/`.
+
+## Base URL
+
+```
+http://<host>:<port>/IntegradoraII_Web/webresources/
+```
+
+The front-end applications use `http://localhost:8080/IntegradoraII_Web/api` (the `/api` alias is mapped to the same JAX-RS application).
+
+## Authentication
+
+GAM uses **session-based authentication**. There is no token header — the browser session established after a successful login is used for subsequent requests.
+
+**Login flow:**
+
+1. `POST /usuario/login` with a JSON body containing `matricula` and `contrasenia`.
+2. On success the server returns the full user object (`200 OK`). Store relevant fields (e.g. `id_usuario`, `id_rol`) in `localStorage` for client-side use.
+3. On failure the server returns `401 Unauthorized` with `{"error": "Credenciales inválidas o usuario inactivo."}` .
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/usuario/login \
+  -H "Content-Type: application/json" \
+  -d '{"matricula": "A12345", "contrasenia": "secreto"}'
+```
+
+## Content Types
+
+| Scenario | Request `Content-Type` |
+|---|---|
+| Most endpoints (JSON body) | `application/json` |
+| `/usuario/eliminar` | `application/x-www-form-urlencoded` |
+| `/reservacion/insertar`, `/reservacion/actualizar`, `/reservacion/eliminar` | `application/x-www-form-urlencoded` |
+| `/reporte/insertar`, `/reporte/eliminar` | `application/x-www-form-urlencoded` |
+
+All responses are `application/json`.
+
+## Error Format
+
+Errors are returned as a JSON object with an `error` key:
+
+```json
+{"error": "Descripción del error"}
+```
+
+Some endpoints return a `mensaje` key for success confirmations:
+
+```json
+{"mensaje": "Operación completada correctamente."}
+```
+
+<Note>
+  HTTP status codes are not always semantically strict in this API. Some error conditions (particularly in `reservacion` endpoints) return `200 OK` with an `error` field in the body. Always inspect the response body.
+</Note>
+
+## Available Resources
+
+<CardGroup cols={2}>
+  <Card title="Usuarios" icon="users" href="/api/usuarios">
+    User management: login, list, create, update, and soft-delete users.
+  </Card>
+  <Card title="Salones" icon="building" href="/api/salones">
+    Classroom management: list, create, update, delete, and view detail.
+  </Card>
+  <Card title="Inventario" icon="box" href="/api/inventario">
+    Furniture inventory: list, search by name, register, update status, and delete items.
+  </Card>
+  <Card title="Reservaciones" icon="calendar" href="/api/reservaciones">
+    Classroom reservations: list, create, update, and cancel.
+  </Card>
+  <Card title="Préstamos" icon="arrow-right-arrow-left" href="/api/prestamos">
+    Furniture loan tracking: list, register, update, and delete loans.
+  </Card>
+  <Card title="Reportes" icon="triangle-exclamation" href="/api/reportes">
+    Damage / incident reports: list, get materials catalog, create, and delete.
+  </Card>
+</CardGroup>
+
+## Full Endpoint Index
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/usuario/login` | Authenticate a user |
+| `GET` | `/usuario/getAll` | List all users |
+| `POST` | `/usuario/insertar` | Create a user |
+| `POST` | `/usuario/modificar` | Update a user |
+| `POST` | `/usuario/eliminar` | Soft-delete a user |
+| `GET` | `/salones/getAll` | List all classrooms |
+| `POST` | `/salones/insertar` | Create a classroom |
+| `POST` | `/salones/actualizar` | Update a classroom |
+| `POST` | `/salones/eliminar` | Delete a classroom |
+| `GET` | `/salones/detalle/{id}` | Get classroom detail with furniture breakdown |
+| `GET` | `/inventario/getAll` | List inventory summary |
+| `GET` | `/inventario/getByName` | Get item details by material name |
+| `POST` | `/inventario/save` | Register a new inventory item |
+| `POST` | `/inventario/update` | Update an inventory item |
+| `POST` | `/inventario/delete` | Delete an inventory item |
+| `GET` | `/inventario/getEdificios` | List all buildings |
+| `GET` | `/inventario/getSalones` | List classrooms by building |
+| `GET` | `/reservacion/getAll` | List all reservations |
+| `POST` | `/reservacion/insertar` | Create a reservation |
+| `POST` | `/reservacion/actualizar` | Update a reservation |
+| `POST` | `/reservacion/eliminar` | Delete a reservation |
+| `GET` | `/reservacion/getSalones` | List classrooms available for reservation |
+| `GET` | `/prestamos/getAll` | List all loans |
+| `POST` | `/prestamos/insert` | Register a new loan |
+| `POST` | `/prestamos/update` | Update a loan |
+| `POST` | `/prestamos/delete` | Delete a loan |
+| `GET` | `/reporte/getAll` | List all damage reports |
+| `GET` | `/reporte/getMateriales` | List materials catalog for report form |
+| `POST` | `/reporte/insertar` | Create a damage report |
+| `POST` | `/reporte/eliminar` | Delete (close) a damage report |

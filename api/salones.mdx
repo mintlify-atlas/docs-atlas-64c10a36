@@ -1,0 +1,304 @@
+---
+title: "Salones"
+description: "Endpoints for classroom management in GAM."
+---
+
+# Salones
+
+Base path: `/salones`
+
+Manages classrooms and labs. The detail endpoint also returns a per-type furniture breakdown for the requested classroom.
+
+---
+
+## GET /salones/getAll
+
+Returns a flat list of all classrooms with their building and status information.
+
+### Response — 200 OK
+
+An array of `Salones` objects.
+
+<ResponseField name="idSalon" type="integer">
+  Classroom identifier.
+</ResponseField>
+
+<ResponseField name="idEdificio" type="integer">
+  Building identifier.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Classroom name, e.g. `"Sala A"`, `"Lab Cómputo 3"`.
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Classification: `"Salon"`, `"Laboratorio"`, etc.
+</ResponseField>
+
+<ResponseField name="capacidad" type="integer">
+  Maximum occupancy.
+</ResponseField>
+
+<ResponseField name="edificio" type="string">
+  Name of the building the classroom belongs to.
+</ResponseField>
+
+<ResponseField name="estatus" type="string">
+  `"Activo"`, `"Inactivo"`, or `"Eliminado"`.
+</ResponseField>
+
+<ResponseField name="ubicacionEdificio" type="string">
+  Physical location description of the building.
+</ResponseField>
+
+<ResponseField name="pisosEdificio" type="integer">
+  Number of floors in the building.
+</ResponseField>
+
+<ResponseField name="divisionAcademica" type="string">
+  Academic division the building belongs to.
+</ResponseField>
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/salones/getAll
+```
+
+---
+
+## POST /salones/insertar
+
+Creates a new classroom.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="idEdificio" type="integer" required>
+  ID of the building to place the classroom in.
+</ParamField>
+
+<ParamField body="nombre" type="string" required>
+  Classroom name.
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Classification, e.g. `"Salon"` or `"Laboratorio"`.
+</ParamField>
+
+<ParamField body="capacidad" type="integer" required>
+  Maximum occupancy.
+</ParamField>
+
+<ParamField body="estatus" type="string">
+  `"Activo"` (default), `"Inactivo"`, or `"Eliminado"`.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"mensaje": "Salón agregado correctamente"}
+```
+
+### Response — 400 Bad Request
+
+```json
+{"mensaje": "Error: <detail>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/salones/insertar \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idEdificio": 2,
+    "nombre": "Sala B-12",
+    "tipo": "Salon",
+    "capacidad": 40,
+    "estatus": "Activo"
+  }'
+```
+
+---
+
+## POST /salones/actualizar
+
+Updates an existing classroom. The `idSalon` field identifies the record.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="idSalon" type="integer" required>
+  ID of the classroom to update.
+</ParamField>
+
+<ParamField body="idEdificio" type="integer" required>
+  ID of the building.
+</ParamField>
+
+<ParamField body="nombre" type="string" required>
+  Updated classroom name.
+</ParamField>
+
+<ParamField body="tipo" type="string" required>
+  Updated classification.
+</ParamField>
+
+<ParamField body="capacidad" type="integer" required>
+  Updated maximum occupancy.
+</ParamField>
+
+<ParamField body="estatus" type="string" required>
+  Updated status.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"mensaje": "Salón actualizado correctamente"}
+```
+
+### Response — 400 Bad Request
+
+```json
+{"mensaje": "Error: <detail>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/salones/actualizar \
+  -H "Content-Type: application/json" \
+  -d '{
+    "idSalon": 7,
+    "idEdificio": 2,
+    "nombre": "Sala B-12 Renovada",
+    "tipo": "Salon",
+    "capacidad": 45,
+    "estatus": "Activo"
+  }'
+```
+
+---
+
+## POST /salones/eliminar
+
+Deletes (or soft-deletes) a classroom by its ID.
+
+**Content-Type:** `application/json`
+
+### Request Body
+
+<ParamField body="idSalon" type="integer" required>
+  ID of the classroom to delete.
+</ParamField>
+
+### Response — 200 OK
+
+```json
+{"mensaje": "Salón eliminado correctamente"}
+```
+
+### Response — 400 Bad Request
+
+```json
+{"mensaje": "Error: <detail>"}
+```
+
+### Example
+
+```bash
+curl -s -X POST \
+  http://localhost:8080/IntegradoraII_Web/webresources/salones/eliminar \
+  -H "Content-Type: application/json" \
+  -d '{"idSalon": 7}'
+```
+
+---
+
+## GET /salones/detalle/{id}
+
+Returns detailed information for a single classroom, including a row per furniture type with `totalMobiliario`, `disponibles`, and `enUso` counts.
+
+### Path Parameters
+
+<ParamField path="id" type="integer" required>
+  The `idSalon` of the classroom to retrieve.
+</ParamField>
+
+### Response — 200 OK
+
+An array of `Salones` objects — one per furniture type found in the classroom. All items share the same classroom metadata; only the furniture-specific fields differ per row.
+
+<ResponseField name="idSalon" type="integer">
+  Classroom identifier.
+</ResponseField>
+
+<ResponseField name="nombre" type="string">
+  Classroom name.
+</ResponseField>
+
+<ResponseField name="tipo" type="string">
+  Classroom classification.
+</ResponseField>
+
+<ResponseField name="capacidad" type="integer">
+  Maximum occupancy.
+</ResponseField>
+
+<ResponseField name="estatus" type="string">
+  Classroom status.
+</ResponseField>
+
+<ResponseField name="edificio" type="string">
+  Building name.
+</ResponseField>
+
+<ResponseField name="ubicacionEdificio" type="string">
+  Building location.
+</ResponseField>
+
+<ResponseField name="pisosEdificio" type="integer">
+  Building floor count.
+</ResponseField>
+
+<ResponseField name="divisionAcademica" type="string">
+  Academic division.
+</ResponseField>
+
+<ResponseField name="tipoMobiliario" type="string">
+  Furniture type label for this row (e.g. `"Silla"`, `"Mesa"`).
+</ResponseField>
+
+<ResponseField name="tipoSalon" type="string">
+  Supplementary type classification.
+</ResponseField>
+
+<ResponseField name="totalMobiliario" type="integer">
+  Total count of this furniture type in the classroom.
+</ResponseField>
+
+<ResponseField name="disponibles" type="integer">
+  Count of units currently available.
+</ResponseField>
+
+<ResponseField name="enUso" type="integer">
+  Count of units currently in use.
+</ResponseField>
+
+### Response — 500 Internal Server Error
+
+```json
+{"mensaje": "Error al obtener detalle: <detail>"}
+```
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/salones/detalle/3
+```
