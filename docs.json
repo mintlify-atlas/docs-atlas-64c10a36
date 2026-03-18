@@ -79,7 +79,8 @@
               "api/inventario",
               "api/reservaciones",
               "api/prestamos",
-              "api/reportes"
+              "api/reportes",
+              "api/dashboard"
             ]
           }
         ]

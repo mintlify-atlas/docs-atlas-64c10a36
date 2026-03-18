@@ -220,19 +220,25 @@ Java REST API  (http://localhost:8080/IntegradoraII_Web)
     | RECHAZADO | `danger` |
     | FINALIZADO | `tertiary` |
 
-    **Creating a reservation** — pressing the "nueva reserva" button opens an `ion-modal`. The form collects `matricula`, `edificio`, `salon`, and `fecha`. On save, the new entry is prepended to the list with status `PENDIENTE`.
+    **Creating a reservation** — pressing the "nueva reserva" button opens an `ion-modal`. The form collects `matricula`, `edificio`, `salon`, and `fecha`. On save, the new entry is prepended to the local list with status `PENDIENTE`.
 
     **Cancelling a reservation** — triggers an `AlertController` confirmation dialog. On confirm, the reservation's status is updated to `CANCELADO` in the local array and `ChangeDetectorRef.detectChanges()` forces an immediate repaint.
 
-    **Service endpoints:**
+    <Warning>
+      The current `ReservacionesPage` loads **hardcoded mock data** via `cargarDatos()` rather than calling the service. The defined service methods (`crear`, `cancelar`) target paths (`/api/reservaciones/crear`, `/api/reservaciones/cancelar/:id`) that do not match the Java backend, which exposes `/reservacion/insertar` (form-encoded POST) and `/reservacion/actualizar` (form-encoded POST). Backend integration for this module is in progress.
+    </Warning>
+
+    **Service as defined:**
 
     ```typescript src/app/Modulos/reservaciones/reservaciones.service.ts
     private API_URL = '/api/reservaciones';
 
-    getAll()              // GET  /api/reservaciones/getAll
-    crear(datos: any)     // POST /api/reservaciones/crear
-    cancelar(id: number)  // PUT  /api/reservaciones/cancelar/:id
+    getAll()              // GET  /api/reservaciones/getAll   (maps to /reservacion/getAll)
+    crear(datos: any)     // POST /api/reservaciones/crear    (not yet wired to backend)
+    cancelar(id: number)  // PUT  /api/reservaciones/cancelar/:id  (not yet wired)
     ```
+
+    To integrate fully, update `ReservacionesService` to call `/api/reservacion/insertar` and `/api/reservacion/actualizar` with `application/x-www-form-urlencoded` bodies matching the Java endpoint signatures.
   </Tab>
 
   <Tab title="Salones">

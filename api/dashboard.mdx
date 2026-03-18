@@ -1,0 +1,96 @@
+---
+title: "Dashboard"
+description: "Endpoint for the admin dashboard summary in GAM — returns totals and recent activity."
+---
+
+# Dashboard
+
+Base path: `/dashboard`
+
+The dashboard resource is served by `RESTMoviliario` (`@Path("dashboard")`). It exposes a single summary endpoint that aggregates key counters and a recent-activity feed for the admin home screen.
+
+---
+
+## GET /dashboard/resumen
+
+Returns a combined dashboard summary object with institution-wide totals and the most recent system events.
+
+### Response — 200 OK
+
+A single `DashBoard` object.
+
+<ResponseField name="totalMobiliario" type="integer">
+  Total number of furniture/equipment units registered in the inventory.
+</ResponseField>
+
+<ResponseField name="totalUsuarios" type="integer">
+  Total number of user accounts in the system.
+</ResponseField>
+
+<ResponseField name="reporteSemanal" type="integer">
+  Number of damage/incident reports filed this week.
+</ResponseField>
+
+<ResponseField name="activas" type="integer">
+  Number of currently active classroom reservations.
+</ResponseField>
+
+<ResponseField name="actividades" type="array">
+  List of recent system activity entries.
+
+  <Expandable title="Actividad fields">
+    <ResponseField name="titulo" type="string">
+      Short title of the activity event, e.g. `"Nueva reservación"`.
+    </ResponseField>
+    <ResponseField name="descripcion" type="string">
+      Longer description of what happened.
+    </ResponseField>
+    <ResponseField name="fechaActividad" type="string">
+      Timestamp of the event, e.g. `"2025-06-10 09:42:00"`.
+    </ResponseField>
+    <ResponseField name="autor" type="string">
+      Matricula or name of the user who triggered the event.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Response — 500 Internal Server Error
+
+```json
+{"result": "error", "message": "Error al consultar inventario: <detail>"}
+```
+
+<Note>
+  Unlike most other error responses in this API which use an `error` key, this endpoint uses a `result` + `message` pair when reporting a server error.
+</Note>
+
+### Example
+
+```bash
+curl -s http://localhost:8080/IntegradoraII_Web/webresources/dashboard/resumen
+```
+
+### Example response
+
+```json
+{
+  "totalMobiliario": 342,
+  "totalUsuarios": 18,
+  "reporteSemanal": 5,
+  "activas": 7,
+  "actividades": [
+    {
+      "titulo": "Nueva reservación",
+      "descripcion": "Salón B-201 reservado por A12345",
+      "fechaActividad": "2025-06-10 09:42:00",
+      "autor": "A12345"
+    },
+    {
+      "titulo": "Préstamo registrado",
+      "descripcion": "Silla SLB12-042 prestada a B99001",
+      "fechaActividad": "2025-06-10 08:15:00",
+      "autor": "admin"
+    }
+  ]
+}
+```

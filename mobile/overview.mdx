@@ -95,3 +95,22 @@ In development, all requests to `/api/*` are proxied to the Java back end by `pr
   }
 }
 ```
+
+## Native Android app (legacy)
+
+The repository also contains a separate native Android application at `02_Movil/app/` built with the standard Android SDK (`AppCompatActivity`). It includes the following activities:
+
+| Activity | Purpose |
+|---|---|
+| `Login` | Login screen |
+| `MainActivity` | Main entry point |
+| `DashboardActivity` | Dashboard view |
+| `InventarioActivity` | Inventory list |
+| `SalonesActivity` | Classroom list |
+| `ReservacionesActivity` | Reservations view |
+| `ReportesDaniosActivity` | Damage reports |
+| `ReportesInventarioActivity` | Inventory reports |
+
+<Note>
+  This native Android app is an earlier prototype. The primary mobile client for GAM is the **Ionic/Angular app** documented in this section, which supports both iOS and Android through Capacitor.
+</Note>

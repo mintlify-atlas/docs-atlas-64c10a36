@@ -13,7 +13,7 @@ The GAM backend exposes a JAX-RS REST API deployed on a Java EE application serv
 http://<host>:<port>/IntegradoraII_Web/webresources/
 ```
 
-The front-end applications use `http://localhost:8080/IntegradoraII_Web/api` (the `/api` alias is mapped to the same JAX-RS application).
+The web front-end calls this URL directly. The mobile app proxies all `/api/*` requests through `proxy.conf.json` to the same origin during development — the path prefix `/api` is stripped by the proxy and never reaches the Java application.
 
 ## Authentication
 
@@ -82,6 +82,9 @@ Some endpoints return a `mensaje` key for success confirmations:
   <Card title="Reportes" icon="triangle-exclamation" href="/api/reportes">
     Damage / incident reports: list, get materials catalog, create, and delete.
   </Card>
+  <Card title="Dashboard" icon="chart-bar" href="/api/dashboard">
+    Admin dashboard summary: total inventory, active reservations, weekly reports, users, and recent activity feed.
+  </Card>
 </CardGroup>
 
 ## Full Endpoint Index
@@ -118,3 +121,4 @@ Some endpoints return a `mensaje` key for success confirmations:
 | `GET` | `/reporte/getMateriales` | List materials catalog for report form |
 | `POST` | `/reporte/insertar` | Create a damage report |
 | `POST` | `/reporte/eliminar` | Delete (close) a damage report |
+| `GET` | `/dashboard/resumen` | Get admin dashboard summary (totals + activity feed) |
